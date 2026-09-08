@@ -6,6 +6,9 @@ const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
 const HABAT_MAX_REPORT_DAYS = 93;
 const HABAT_DEFAULT_RECORD_LIMIT = 200;
 const HABAT_MAX_RECORD_LIMIT = 500;
+const HABAT_MAX_GEOFENCE_ACCURACY_TOLERANCE_M = 20;
+const HABAT_GEOFENCE_ACCURACY_TOLERANCE_RATIO = 0.5;
+const HABAT_MAX_GEOFENCE_TOLERANCE_RADIUS_RATIO = 0.2;
 
 export async function handleHabatAttendanceV2Request({
   request,
@@ -1339,7 +1342,7 @@ function validateClockLocation(settings, value) {
       response: json(503, { ok: false, message: "habat_location_not_configured" }),
     };
   }
-  if (required && (accuracyM === null || accuracyM > maxAccuracy)) {
+  if (required && (accuracyM === null || accuracyM < 0 || accuracyM > maxAccuracy)) {
     return {
       ok: false,
       response: json(422, {
@@ -1359,7 +1362,8 @@ function validateClockLocation(settings, value) {
     centerLng !== null
   ) {
     distanceM = haversineMeters(latitude, longitude, centerLat, centerLng);
-    if (required && distanceM > radius) {
+    const accuracyToleranceM = getBoundedGeofenceAccuracyToleranceM(radius, accuracyM);
+    if (required && distanceM > radius + accuracyToleranceM) {
       return {
         ok: false,
         response: json(403, {
@@ -1379,6 +1383,18 @@ function validateClockLocation(settings, value) {
     accuracyM,
     distanceM: distanceM === null ? null : Math.round(distanceM * 10) / 10,
   };
+}
+
+function getBoundedGeofenceAccuracyToleranceM(radiusM, accuracyM) {
+  if (!Number.isFinite(radiusM) || radiusM <= 0 || !Number.isFinite(accuracyM) || accuracyM <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    HABAT_MAX_GEOFENCE_ACCURACY_TOLERANCE_M,
+    radiusM * HABAT_MAX_GEOFENCE_TOLERANCE_RADIUS_RATIO,
+    accuracyM * HABAT_GEOFENCE_ACCURACY_TOLERANCE_RATIO
+  );
 }
 
 function haversineMeters(lat1, lon1, lat2, lon2) {

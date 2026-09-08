@@ -175,6 +175,57 @@ try {
   assert.equal((await db.prepare("SELECT uid FROM habat_attendance_access WHERE id = 'manager'").first()).uid, "legacy-manager-uid");
   console.log("[integration] Workforce profile/employment/link/schedule, idempotent access and legacy history PASS");
 
+  // A mobile GPS point can land slightly outside a branch boundary even when the
+  // user is inside it. The worker accepts only a bounded fraction of its reported
+  // accuracy, while preserving the configured radius as the authoritative limit.
+  await db.prepare("UPDATE habat_attendance_access SET clock_enabled = 1 WHERE id = 'manager'").run();
+  const branchLatitude = 24.7136;
+  const branchLongitude = 46.6753;
+  const metersPerLatitudeDegree = 111194.9266;
+  const latitudeAtDistance = meters => branchLatitude + meters / metersPerLatitudeDegree;
+  await api("v2/settings", {
+    jar: manager,
+    method: "PATCH",
+    body: {
+      locationRequired: true,
+      latitude: branchLatitude,
+      longitude: branchLongitude,
+      radiusM: 100,
+      maxAccuracyM: 150,
+    },
+  });
+
+  const mobileClockIn = await api("v2/check-in", {
+    jar: manager,
+    body: {
+      latitude: latitudeAtDistance(108),
+      longitude: branchLongitude,
+      accuracyM: 20,
+    },
+  });
+  assert.equal(mobileClockIn.payload.record.checkInLocation.latitude, latitudeAtDistance(108));
+  assert.equal(mobileClockIn.payload.record.checkInLocation.longitude, branchLongitude);
+  assert.equal(mobileClockIn.payload.record.checkInLocation.accuracyM, 20);
+  assert.ok(mobileClockIn.payload.record.checkInLocation.distanceM > 100);
+  assert.ok(mobileClockIn.payload.record.checkInLocation.distanceM <= 110);
+
+  const rejectedForAccuracy = await api("v2/check-out", {
+    jar: manager,
+    status: 422,
+    body: { latitude: branchLatitude, longitude: branchLongitude, accuracyM: 151 },
+  });
+  assert.equal(rejectedForAccuracy.payload.message, "habat_location_accuracy_too_low");
+
+  const rejectedOutsideRange = await api("v2/check-out", {
+    jar: manager,
+    status: 403,
+    body: { latitude: latitudeAtDistance(130), longitude: branchLongitude, accuracyM: 20 },
+  });
+  assert.equal(rejectedOutsideRange.payload.message, "habat_outside_location_range");
+  assert.ok(rejectedOutsideRange.payload.distanceM > rejectedOutsideRange.payload.radiusM);
+  assert.equal(rejectedOutsideRange.payload.radiusM, 100);
+  console.log("[integration] fresh mobile GPS payload, bounded accuracy tolerance, and outside-range rejection PASS");
+
   await api("auth/admin/reset-password", { jar: manager, body: { accessId, password: resetPassword } });
   await api("auth/session", { jar: employee, status: 401 });
   await api("auth/login", { body: { email: "employee@example.test", password: newPassword }, status: 401 });

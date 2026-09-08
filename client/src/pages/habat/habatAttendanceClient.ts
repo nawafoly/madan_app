@@ -390,61 +390,19 @@ export async function readBrowserLocation(
   }
 
   return new Promise((resolve, reject) => {
-    let bestPosition: GeolocationPosition | null = null;
-    let watchId: number | null = null;
-    let finished = false;
-
-    const finish = (error?: GeolocationPositionError) => {
-      if (finished) return;
-      finished = true;
-
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-      window.clearTimeout(timeoutId);
-
-      if (bestPosition) {
+    navigator.geolocation.getCurrentPosition(
+      position =>
         resolve({
-          latitude: bestPosition.coords.latitude,
-          longitude: bestPosition.coords.longitude,
-          accuracyM: bestPosition.coords.accuracy,
-        });
-        return;
-      }
-
-      if (required) {
-        reject(error ?? new Error("geolocation_unavailable"));
-      } else {
-        resolve({});
-      }
-    };
-
-    const timeoutId = window.setTimeout(() => finish(), 10000);
-
-    watchId = navigator.geolocation.watchPosition(
-      position => {
-        if (
-          !bestPosition ||
-          position.coords.accuracy < bestPosition.coords.accuracy
-        ) {
-          bestPosition = position;
-        }
-
-        if (position.coords.accuracy <= 20) {
-          finish();
-        }
-      },
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyM: position.coords.accuracy,
+        }),
       error => {
-        if (bestPosition) {
-          finish();
-          return;
-        }
-
-        finish(error);
+        if (required) reject(error);
+        else resolve({});
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
         maximumAge: 0,
       }
     );
