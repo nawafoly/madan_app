@@ -12,6 +12,7 @@ import {
   TriangleAlert,
   UserRound,
 } from "lucide-react";
+import HabatDatePicker from "./HabatDatePicker";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -506,11 +507,11 @@ export function AuditLogPage() {
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           <label className="text-xs font-bold text-slate-500">
             من
-            <input type="date" value={from} onChange={event => setFrom(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900" />
+            <HabatDatePicker value={from} onChange={setFrom} />
           </label>
           <label className="text-xs font-bold text-slate-500">
             إلى
-            <input type="date" value={to} onChange={event => setTo(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900" />
+            <HabatDatePicker value={to} onChange={setTo} />
           </label>
           <label className="text-xs font-bold text-slate-500">
             بريد المنفذ

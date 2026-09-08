@@ -9,6 +9,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import HabatDatePicker from "./HabatDatePicker";
 import {
   useCallback,
   useEffect,
@@ -715,8 +716,8 @@ export function RecordsPage() {
     <div className="space-y-6">
       <Panel title="سجل الحضور" subtitle="فلترة السجلات ومراجعة التأخير والانصراف والتصحيحات">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <input type="date" value={from} onChange={event => setFrom(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
-          <input type="date" value={to} onChange={event => setTo(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
+          <HabatDatePicker value={from} onChange={setFrom} />
+          <HabatDatePicker value={to} onChange={setTo} />
           <input placeholder="بريد الموظف" value={email} onChange={event => setEmail(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
           <select value={status} onChange={event => setStatus(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3">
             <option value="">كل الحالات</option>
@@ -785,11 +786,11 @@ export function RecordsPage() {
             <div className="mt-5 grid gap-3">
               <label className="text-sm font-bold">
                 وقت الحضور
-                <input type="datetime-local" value={checkInAt} onChange={event => setCheckInAt(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3" required />
+                <HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} className="mt-2" />
               </label>
               <label className="text-sm font-bold">
                 وقت الانصراف
-                <input type="datetime-local" value={checkOutAt} onChange={event => setCheckOutAt(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3" />
+                <HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} className="mt-2" />
               </label>
               <label className="text-sm font-bold">
                 سبب التصحيح
@@ -839,8 +840,8 @@ export function ReportsPage() {
     <div className="space-y-6">
       <Panel title="التقارير" subtitle="ملخص الحضور والغياب والتأخير وساعات العمل">
         <div className="flex flex-wrap gap-3">
-          <input type="date" value={from} onChange={event => setFrom(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
-          <input type="date" value={to} onChange={event => setTo(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
+          <HabatDatePicker value={from} onChange={setFrom} />
+          <HabatDatePicker value={to} onChange={setTo} />
           <button onClick={() => void refresh()} className="flex h-11 items-center gap-2 rounded-xl bg-black px-5 font-bold text-white">
             <BarChart3 size={17} /> تحديث التقرير
           </button>
