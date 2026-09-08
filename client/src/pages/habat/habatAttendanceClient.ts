@@ -248,8 +248,27 @@ export function friendlyHabatError(error: unknown): string {
       return "يلزم السماح بالموقع لتسجيل الحضور أو الانصراف.";
     case "habat_location_not_configured":
       return "موقع الفرع لم يتم ضبطه من الإدارة بعد.";
-    case "habat_location_accuracy_too_low":
+    case "habat_location_accuracy_too_low": {
+      const payload =
+        error instanceof HabatApiError ? error.payload : null;
+      const accuracyValue = payload?.accuracyM;
+      const maxAccuracyValue = payload?.maxAccuracyM;
+      const accuracyM = Number(accuracyValue);
+      const maxAccuracyM = Number(maxAccuracyValue);
+
+      if (
+        accuracyValue !== null &&
+        accuracyValue !== undefined &&
+        maxAccuracyValue !== null &&
+        maxAccuracyValue !== undefined &&
+        Number.isFinite(accuracyM) &&
+        Number.isFinite(maxAccuracyM)
+      ) {
+        return `دقة الموقع الحالية ±${accuracyM}م، والحد المسموح ±${maxAccuracyM}م. انتظر تحسن إشارة GPS وحاول مجددًا.`;
+      }
+
       return "دقة الموقع غير كافية. انتظر تحسن إشارة GPS وحاول مجددًا.";
+    }
     case "habat_outside_location_range": {
       const payload =
         error instanceof HabatApiError ? error.payload : null;
