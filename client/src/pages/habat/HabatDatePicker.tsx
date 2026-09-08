@@ -1,5 +1,7 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type PickerMode = "date" | "month" | "datetime";
 
@@ -10,12 +12,18 @@ type HabatDatePickerProps = {
   mode?: PickerMode;
 };
 
-const MONTHS = [
+const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
   "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
 ];
 
-const DAYS = ["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"];
+const EN_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const AR_DAYS = ["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"];
+const EN_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function dateKey(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -77,6 +85,10 @@ export default function HabatDatePicker({
   className = "",
   mode = "date",
 }: HabatDatePickerProps) {
+  const { language } = useLanguage();
+  const months = language === "ar" ? AR_MONTHS : EN_MONTHS;
+  const daysOfWeek = language === "ar" ? AR_DAYS : EN_DAYS;
+
   const selected = parseValue(value, mode);
 
   const initial = selected ?? (() => {
@@ -92,6 +104,14 @@ export default function HabatDatePicker({
   })();
 
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState({
+    top: 0,
+    left: 16,
+    width: 310,
+  });
+
   const [viewYear, setViewYear] = useState(initial.year);
   const [viewMonth, setViewMonth] = useState(initial.month);
   const [draftDay, setDraftDay] = useState(initial.day);
@@ -107,6 +127,63 @@ export default function HabatDatePicker({
       ...Array.from({ length: count }, (_, index) => index + 1),
     ];
   }, [viewYear, viewMonth]);
+
+  function updatePopoverPosition() {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 8;
+    const edge = 16;
+
+    const width = Math.min(310, viewportWidth - edge * 2);
+    const measuredHeight = popoverRef.current?.offsetHeight ?? 390;
+
+    const spaceBelow = viewportHeight - rect.bottom - gap - edge;
+    const spaceAbove = rect.top - gap - edge;
+
+    const openAbove =
+      measuredHeight > spaceBelow && spaceAbove > spaceBelow;
+
+    const desiredTop = openAbove
+      ? rect.top - gap - measuredHeight
+      : rect.bottom + gap;
+
+    const top = Math.max(
+      edge,
+      Math.min(desiredTop, viewportHeight - measuredHeight - edge),
+    );
+
+    const centeredLeft = rect.left + rect.width / 2 - width / 2;
+    const left = Math.max(
+      edge,
+      Math.min(centeredLeft, viewportWidth - width - edge),
+    );
+
+    setPopoverPosition({ top, left, width });
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePopoverPosition();
+  }, [open, mode, viewYear, viewMonth]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleResize = () => updatePopoverPosition();
+    const handleScroll = () => setOpen(false);
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScroll, true);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [open]);
 
   function moveMonth(amount: number) {
     const next = new Date(viewYear, viewMonth + amount, 1);
@@ -154,10 +231,10 @@ export default function HabatDatePicker({
 
   const displayValue = selected
     ? mode === "month"
-      ? `${MONTHS[selected.month]} ${selected.year}`
+      ? `${months[selected.month]} ${selected.year}`
       : mode === "datetime"
-        ? `${selected.day} ${MONTHS[selected.month]} ${selected.year} · ${timeKey(selected.hour, selected.minute)}`
-        : `${selected.day} ${MONTHS[selected.month]} ${selected.year}`
+        ? `${selected.day} ${months[selected.month]} ${selected.year} · ${timeKey(selected.hour, selected.minute)}`
+        : `${selected.day} ${months[selected.month]} ${selected.year}`
     : mode === "month"
       ? "اختر الشهر"
       : mode === "datetime"
@@ -165,8 +242,9 @@ export default function HabatDatePicker({
         : "اختر التاريخ";
 
   return (
-    <div className={`relative ${className}`} dir="rtl">
+    <div className={`relative ${className}`} dir={languageDir(language)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={openPicker}
         className="flex h-11 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -184,18 +262,26 @@ export default function HabatDatePicker({
         <>
           <button
             type="button"
-            aria-label="السنة السابقة"
-            className="fixed inset-0 z-40 cursor-default"
+            aria-label={tr(language, "السنة السابقة", "Previous year")}
+            className="fixed inset-0 z-[60] cursor-default"
             onClick={() => setOpen(false)}
           />
 
-          <div className="absolute left-1/2 top-[calc(100%+8px)] z-50 w-[310px] max-w-[calc(100vw-32px)] -translate-x-1/2 rounded-[22px] border border-slate-200 bg-white p-4 shadow-xl">
+          <div
+            ref={popoverRef}
+            className="fixed z-[70] max-h-[calc(100vh-32px)] overflow-y-auto rounded-[22px] border border-slate-200 bg-white p-4 shadow-xl"
+            style={{
+              top: popoverPosition.top,
+              left: popoverPosition.left,
+              width: popoverPosition.width,
+            }}
+          >
             {mode === "month" ? (
               <>
                 <div className="mb-4 flex items-center justify-between">
                   <button
                     type="button"
-                    aria-label="السنة السابقة"
+                    aria-label={tr(language, "السنة السابقة", "Previous year")}
                     onClick={() => setViewYear(year => year + 1)}
                     className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100"
                   >
@@ -206,7 +292,7 @@ export default function HabatDatePicker({
 
                   <button
                     type="button"
-                    aria-label="السنة السابقة"
+                    aria-label={tr(language, "السنة السابقة", "Previous year")}
                     onClick={() => setViewYear(year => year - 1)}
                     className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100"
                   >
@@ -259,7 +345,7 @@ export default function HabatDatePicker({
                 <div className="mb-4 flex items-center justify-between">
                   <button
                     type="button"
-                    aria-label="الشهر السابق"
+                    aria-label={tr(language, "الشهر السابق", "Previous month")}
                     onClick={() => moveMonth(1)}
                     className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100"
                   >
@@ -267,12 +353,12 @@ export default function HabatDatePicker({
                   </button>
 
                   <div className="font-black">
-                    {MONTHS[viewMonth]} {viewYear}
+                    {months[viewMonth]} {viewYear}
                   </div>
 
                   <button
                     type="button"
-                    aria-label="الشهر السابق"
+                    aria-label={tr(language, "الشهر السابق", "Previous month")}
                     onClick={() => moveMonth(-1)}
                     className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-slate-100"
                   >
@@ -281,7 +367,7 @@ export default function HabatDatePicker({
                 </div>
 
                 <div className="grid grid-cols-7 gap-1">
-                  {DAYS.map(day => (
+                  {daysOfWeek.map(day => (
                     <div
                       key={day}
                       className="py-2 text-center text-[11px] font-bold text-slate-400"
@@ -333,7 +419,7 @@ export default function HabatDatePicker({
                       <Clock3 className="h-4 w-4 shrink-0 text-slate-400" />
 
                       <select
-                        aria-label="الساعة"
+                        aria-label={tr(language, "الساعة", "Hour")}
                         value={draftHour}
                         onChange={event => setDraftHour(Number(event.target.value))}
                         className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-slate-400"
@@ -348,7 +434,7 @@ export default function HabatDatePicker({
                       <span className="font-black text-slate-400">:</span>
 
                       <select
-                        aria-label="الدقيقة"
+                        aria-label={tr(language, "الدقيقة", "Minute")}
                         value={draftMinute}
                         onChange={event => setDraftMinute(Number(event.target.value))}
                         className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-slate-400"

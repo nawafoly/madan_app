@@ -804,19 +804,13 @@ async function listScheduleAssignments(db, tenantId, employeeId) {
 
 async function createScheduleAssignment(db, tenantId, employeeId, request, principal) {
   const body = await readJson(request);
-  const templateId = clean(body.templateId);
   const effectiveFrom = clean(body.effectiveFrom);
-  const effectiveTo = nullable(body.effectiveTo);
-  const weeklyRestWeekday = Number(body.weeklyRestWeekday ?? body.weekly_rest_weekday);
   const reason = nullable(body.reason);
   const operationId = clean(body.operationId || body.operation_id) || id("wf_shift_assignment_op");
+  const requestedPattern = body.weekPattern || body.week_pattern || null;
 
-  if (!templateId) return json(400, { ok: false, message: "workforce_schedule_template_required" });
-  if (!isDateKey(effectiveFrom) || (effectiveTo && (!isDateKey(effectiveTo) || effectiveTo < effectiveFrom))) {
+  if (!isDateKey(effectiveFrom)) {
     return json(400, { ok: false, message: "workforce_schedule_assignment_dates_invalid" });
-  }
-  if (!Number.isInteger(weeklyRestWeekday) || weeklyRestWeekday < 0 || weeklyRestWeekday > 6) {
-    return json(400, { ok: false, message: "workforce_weekly_rest_weekday_required" });
   }
 
   const prior = await db.prepare(
@@ -829,38 +823,50 @@ async function createScheduleAssignment(db, tenantId, employeeId, request, princ
     return json(200, { ok: true, idempotent: true, assignment: prior });
   }
 
-  const template = await db
-    .prepare(`SELECT id FROM workforce_schedule_templates WHERE tenant_id = ? AND id = ? AND is_active = 1 LIMIT 1`)
-    .bind(tenantId, templateId)
-    .first();
-  if (!template) return json(404, { ok: false, message: "workforce_schedule_template_not_found" });
+  const normalized = await normalizeEmployeeWeekPattern(db, tenantId, body, requestedPattern);
+  if (!normalized.ok) return json(normalized.status, { ok: false, message: normalized.message });
 
-  const workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== weeklyRestWeekday);
-  const weekPattern = JSON.stringify({
-    version: 1,
-    weeklyRestWeekday,
-    workingDays,
-  });
   const assignmentId = id("wf_shift_assignment");
   const now = nowIso();
+  const previousEnd = addDaysDateKey(effectiveFrom, -1);
 
-  await db
-    .prepare(
+  const current = await db.prepare(
+    `SELECT id, effective_from, effective_to
+       FROM workforce_schedule_assignments
+      WHERE tenant_id = ? AND employee_id = ?
+        AND effective_from < ?
+        AND (effective_to IS NULL OR effective_to >= ?)
+      ORDER BY effective_from DESC, created_at DESC, id DESC
+      LIMIT 1`
+  ).bind(tenantId, employeeId, effectiveFrom, effectiveFrom).first();
+
+  const statements = [];
+
+  if (current && clean(current.effective_from) < effectiveFrom) {
+    statements.push(
+      db.prepare(
+        `UPDATE workforce_schedule_assignments
+            SET effective_to = ?, updated_at = ?
+          WHERE tenant_id = ? AND employee_id = ? AND id = ?`
+      ).bind(previousEnd, now, tenantId, employeeId, current.id)
+    );
+  }
+
+  statements.push(
+    db.prepare(
       `INSERT INTO workforce_schedule_assignments (
          id, tenant_id, employee_id, template_id, effective_from, effective_to,
          weekly_rest_weekday, week_pattern_json, reason, operation_id,
          created_by_uid, created_by_email, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .bind(
+       ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
       assignmentId,
       tenantId,
       employeeId,
-      templateId,
+      normalized.fallbackTemplateId,
       effectiveFrom,
-      effectiveTo,
-      weeklyRestWeekday,
-      weekPattern,
+      normalized.weeklyRestWeekday,
+      JSON.stringify(normalized.weekPattern),
       reason,
       operationId,
       principal.uid || null,
@@ -868,13 +874,148 @@ async function createScheduleAssignment(db, tenantId, employeeId, request, princ
       now,
       now
     )
-    .run();
-  const row = await db.prepare(`SELECT * FROM workforce_schedule_assignments WHERE tenant_id = ? AND id = ?`).bind(tenantId, assignmentId).first();
-  await audit(db, tenantId, principal, "workforce.schedule_assignment.create", "schedule_assignment", assignmentId, null, row, {
-    scheduleOwnership: "employee_effective_dated",
-    weeklyRestWeekday,
-  });
+  );
+
+  await db.batch(statements);
+
+  const row = await db.prepare(
+    `SELECT * FROM workforce_schedule_assignments WHERE tenant_id = ? AND id = ?`
+  ).bind(tenantId, assignmentId).first();
+
+  await audit(
+    db,
+    tenantId,
+    principal,
+    "workforce.schedule_assignment.create",
+    "schedule_assignment",
+    assignmentId,
+    current || null,
+    row,
+    {
+      scheduleOwnership: "employee_effective_dated",
+      version: 2,
+      weeklyRestWeekday: normalized.weeklyRestWeekday,
+      workingDays: normalized.workingDays,
+    }
+  );
+
   return json(201, { ok: true, idempotent: false, assignment: row });
+}
+
+async function normalizeEmployeeWeekPattern(db, tenantId, body, requestedPattern) {
+  if (requestedPattern && typeof requestedPattern === "object" && requestedPattern.days && typeof requestedPattern.days === "object") {
+    const days = {};
+    const workingDays = [];
+    const restDays = [];
+    const templateIds = new Set();
+
+    for (let day = 0; day <= 6; day += 1) {
+      const raw = requestedPattern.days[String(day)] ?? requestedPattern.days[day];
+      if (!raw || typeof raw !== "object") {
+        return { ok: false, status: 400, message: "workforce_week_pattern_day_required" };
+      }
+
+      const kind = clean(raw.kind);
+      if (kind === "rest") {
+        days[String(day)] = { kind: "rest" };
+        restDays.push(day);
+        continue;
+      }
+
+      if (kind !== "work") {
+        return { ok: false, status: 400, message: "workforce_week_pattern_kind_invalid" };
+      }
+
+      const templateId = clean(raw.templateId || raw.template_id);
+      if (!templateId) {
+        return { ok: false, status: 400, message: "workforce_schedule_template_required" };
+      }
+
+      days[String(day)] = { kind: "work", templateId };
+      workingDays.push(day);
+      templateIds.add(templateId);
+    }
+
+    if (!workingDays.length) {
+      return { ok: false, status: 400, message: "workforce_week_pattern_workday_required" };
+    }
+
+    if (templateIds.size) {
+      const placeholders = [...templateIds].map(() => "?").join(",");
+      const result = await db.prepare(
+        `SELECT id FROM workforce_schedule_templates
+          WHERE tenant_id = ? AND is_active = 1 AND id IN (${placeholders})`
+      ).bind(tenantId, ...templateIds).all();
+
+      const found = new Set((result?.results || []).map(row => clean(row.id)));
+      if (found.size !== templateIds.size) {
+        return { ok: false, status: 404, message: "workforce_schedule_template_not_found" };
+      }
+    }
+
+    const fallbackTemplateId = clean(days[String(workingDays[0])]?.templateId);
+    const weeklyRestWeekday = restDays.length === 1 ? restDays[0] : null;
+
+    return {
+      ok: true,
+      weekPattern: {
+        version: 2,
+        days,
+        workingDays,
+        restDays,
+      },
+      workingDays,
+      weeklyRestWeekday,
+      fallbackTemplateId,
+    };
+  }
+
+  const templateId = clean(body.templateId);
+  const weeklyRestWeekday = Number(body.weeklyRestWeekday ?? body.weekly_rest_weekday);
+
+  if (!templateId) {
+    return { ok: false, status: 400, message: "workforce_schedule_template_required" };
+  }
+
+  if (!Number.isInteger(weeklyRestWeekday) || weeklyRestWeekday < 0 || weeklyRestWeekday > 6) {
+    return { ok: false, status: 400, message: "workforce_weekly_rest_weekday_required" };
+  }
+
+  const template = await db
+    .prepare(`SELECT id FROM workforce_schedule_templates WHERE tenant_id = ? AND id = ? AND is_active = 1 LIMIT 1`)
+    .bind(tenantId, templateId)
+    .first();
+
+  if (!template) {
+    return { ok: false, status: 404, message: "workforce_schedule_template_not_found" };
+  }
+
+  const workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== weeklyRestWeekday);
+  const days = {};
+
+  for (let day = 0; day <= 6; day += 1) {
+    days[String(day)] = day === weeklyRestWeekday
+      ? { kind: "rest" }
+      : { kind: "work", templateId };
+  }
+
+  return {
+    ok: true,
+    weekPattern: {
+      version: 2,
+      days,
+      workingDays,
+      restDays: [weeklyRestWeekday],
+    },
+    workingDays,
+    weeklyRestWeekday,
+    fallbackTemplateId: templateId,
+  };
+}
+
+function addDaysDateKey(value, amount) {
+  const [year, month, day] = String(value).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount, 12)).toISOString().slice(0, 10);
 }
 
 async function requireEmployeeAccess(db, tenantId, employeeId, principal) {

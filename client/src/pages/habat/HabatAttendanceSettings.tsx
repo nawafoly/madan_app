@@ -23,6 +23,9 @@ import {
 } from "./habatAttendanceClient";
 import "./habat-mobile.css";
 
+import HabatNumberInput from "@/pages/habat/HabatNumberInput";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 type Props = {
   onDataChanged?: () => void | Promise<void>;
 };
@@ -85,6 +88,7 @@ function GeofenceMap({
   radiusM: number;
   onChange: (point: Point) => void;
 }) {
+  const { language } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(17);
   const [size, setSize] = useState<Size>({ width: 640, height: 330 });
@@ -169,7 +173,7 @@ function GeofenceMap({
         onClick={choosePoint}
         className="relative h-[300px] w-full cursor-crosshair overflow-hidden bg-slate-100 sm:h-[360px]"
         role="application"
-        aria-label="خريطة تحديد نطاق الحضور"
+        aria-label={tr(language, "خريطة تحديد نطاق الحضور", "Attendance geofence map")}
       >
         {map.tiles.map(tile => (
           <img
@@ -204,7 +208,7 @@ function GeofenceMap({
             type="button"
             onClick={() => setZoom(current => Math.min(19, current + 1))}
             className="flex h-10 w-10 items-center justify-center border-b border-slate-100"
-            aria-label="تكبير الخريطة"
+            aria-label={tr(language, "تكبير الخريطة", "Zoom in map")}
           >
             <Plus size={18} />
           </button>
@@ -212,7 +216,7 @@ function GeofenceMap({
             type="button"
             onClick={() => setZoom(current => Math.max(12, current - 1))}
             className="flex h-10 w-10 items-center justify-center"
-            aria-label="تصغير الخريطة"
+            aria-label={tr(language, "تصغير الخريطة", "Zoom out map")}
           >
             <Minus size={18} />
           </button>
@@ -220,7 +224,7 @@ function GeofenceMap({
 
         {!configured ? (
           <div className="pointer-events-none absolute inset-x-4 bottom-10 rounded-2xl bg-white/95 px-4 py-3 text-center text-sm font-bold shadow-sm">
-            اضغط على الخريطة لتحديد موقع الفرع
+            {tr(language, "اضغط على الخريطة لتحديد موقع الفرع", "Click the map to set the branch location")}
           </div>
         ) : null}
 
@@ -240,11 +244,11 @@ function GeofenceMap({
       <div className="grid gap-2 border-t border-slate-200 bg-white px-4 py-3 text-xs sm:grid-cols-2">
         <p className="truncate text-slate-600">
           <span className="font-bold text-slate-900">Latitude:</span>{" "}
-          {latitude == null ? "غير محدد" : latitude.toFixed(6)}
+          {latitude == null ? tr(language, "غير محدد", "Not Set") : latitude.toFixed(6)}
         </p>
         <p className="truncate text-slate-600">
           <span className="font-bold text-slate-900">Longitude:</span>{" "}
-          {longitude == null ? "غير محدد" : longitude.toFixed(6)}
+          {longitude == null ? tr(language, "غير محدد", "Not Set") : longitude.toFixed(6)}
         </p>
       </div>
     </div>
@@ -252,6 +256,7 @@ function GeofenceMap({
 }
 
 export default function HabatAttendanceSettings({ onDataChanged }: Props) {
+  const { language } = useLanguage();
   const [settings, setSettings] = useState<HabatSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -276,7 +281,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
 
   async function useCurrentLocation() {
     if (!navigator.geolocation) {
-      setError("المتصفح لا يدعم تحديد الموقع.");
+      setError(tr(language, "المتصفح لا يدعم تحديد الموقع.", "This browser does not support geolocation."));
       return;
     }
 
@@ -294,11 +299,11 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
               }
             : current
         );
-        setMessage("تم وضع مركز النطاق على موقعك الحالي. احفظ الإعدادات لتطبيقه.");
+        setMessage(tr(language, "تم وضع مركز النطاق على موقعك الحالي. احفظ الإعدادات لتطبيقه.", "Geofence center set to your current location. Save settings to apply it."));
         setLocating(false);
       },
       () => {
-        setError("تعذر الحصول على الموقع. اسمح للموقع من إعدادات المتصفح.");
+        setError(tr(language, "تعذر الحصول على الموقع. اسمح للموقع من إعدادات المتصفح.", "Unable to get your location. Allow location access in browser settings."));
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -313,7 +318,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
       settings.locationRequired &&
       (settings.latitude == null || settings.longitude == null)
     ) {
-      setError("حدد موقع الفرع على الخريطة قبل تفعيل نطاق الحضور.");
+      setError(tr(language, "حدد موقع الفرع على الخريطة قبل تفعيل نطاق الحضور.", "Set the branch location on the map before enabling the attendance geofence."));
       return;
     }
 
@@ -335,7 +340,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
         }
       );
       setSettings(payload.settings);
-      setMessage("تم حفظ موقع الفرع ونطاق الحضور بنجاح.");
+      setMessage(tr(language, "تم حفظ موقع الفرع ونطاق الحضور بنجاح.", "Branch location and attendance geofence saved successfully."));
       await onDataChanged?.();
     } catch (caught) {
       setError(friendlyHabatError(caught));
@@ -347,7 +352,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   if (!settings) {
     return (
       <section className="rounded-[24px] border border-slate-200 bg-white p-5 text-center shadow-sm sm:p-6">
-        <p className="py-8 text-sm font-semibold text-slate-500">جاري تحميل إعدادات الحضور...</p>
+        <p className="py-8 text-sm font-semibold text-slate-500">{tr(language, "جاري تحميل إعدادات الحضور...", "Loading attendance settings...")}</p>
       </section>
     );
   }
@@ -366,12 +371,12 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div dir={languageDir(language)} className="space-y-4 text-start sm:space-y-6">
       <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
         <div className="mb-5 min-w-0">
-          <h2 className="text-xl font-black">إعدادات الحضور</h2>
+          <h2 className="text-xl font-black">{tr(language, "إعدادات الحضور", "Attendance Settings")}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            حدد موقع الفرع من الخريطة ثم اضبط نصف قطر الحضور ودقة GPS.
+            {tr(language, "حدد موقع الفرع من الخريطة ثم اضبط نصف قطر الحضور ودقة GPS.", "Set the branch location on the map, then configure the attendance radius and GPS accuracy.")}
           </p>
         </div>
 
@@ -391,10 +396,10 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
               />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-black leading-6 sm:text-base">
-                  إلزام الموظف بالتواجد داخل نطاق الفرع وقت البصمة
+                  {tr(language, "إلزام الموظف بالتواجد داخل نطاق الفرع وقت البصمة", "Require employee to be inside the branch geofence when clocking")}
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  عند التفعيل يتم فحص الموقع فعليًا في السيرفر، وليس في الواجهة فقط.
+                  {tr(language, "عند التفعيل يتم فحص الموقع فعليًا في السيرفر، وليس في الواجهة فقط.", "When enabled, location is validated by the server, not only the interface.")}
                 </span>
               </span>
             </label>
@@ -403,9 +408,9 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           <div>
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h3 className="font-black">موقع الفرع ونطاق الحضور</h3>
+                <h3 className="font-black">{tr(language, "موقع الفرع ونطاق الحضور", "Branch Location and Attendance Geofence")}</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  اضغط على أي نقطة بالخريطة لتحديد مركز النطاق. الدائرة تمثل المسافة المسموح بها.
+                  {tr(language, "اضغط على أي نقطة بالخريطة لتحديد مركز النطاق. الدائرة تمثل المسافة المسموح بها.", "Click anywhere on the map to set the geofence center. The circle represents the allowed distance.")}
                 </p>
               </div>
               <button
@@ -415,7 +420,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                 className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black sm:w-auto"
               >
                 <LocateFixed size={18} />
-                {locating ? "جاري تحديد الموقع..." : "استخدام موقعي الحالي"}
+                {locating ? tr(language, "جاري تحديد الموقع...", "Locating...") : tr(language, "استخدام موقعي الحالي", "Use My Current Location")}
               </button>
             </div>
 
@@ -430,42 +435,38 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="min-w-0 text-sm font-bold">
               Latitude
-              <input
-                type="number"
+              <HabatNumberInput
                 inputMode="decimal"
                 step="any"
                 value={settings.latitude ?? ""}
-                onChange={event =>
+                onValueChange={value =>
                   setSettings({
                     ...settings,
                     latitude:
-                      event.target.value === ""
+                      value === ""
                         ? null
-                        : Number(event.target.value),
+                        : Number(value),
                   })
                 }
-                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-left outline-none focus:border-slate-900"
-                dir="ltr"
+                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
               />
             </label>
             <label className="min-w-0 text-sm font-bold">
               Longitude
-              <input
-                type="number"
+              <HabatNumberInput
                 inputMode="decimal"
                 step="any"
                 value={settings.longitude ?? ""}
-                onChange={event =>
+                onValueChange={value =>
                   setSettings({
                     ...settings,
                     longitude:
-                      event.target.value === ""
+                      value === ""
                         ? null
-                        : Number(event.target.value),
+                        : Number(value),
                   })
                 }
-                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-left outline-none focus:border-slate-900"
-                dir="ltr"
+                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
               />
             </label>
           </div>
@@ -473,13 +474,13 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-black">نصف قطر الحضور</p>
+                <p className="text-sm font-black">{tr(language, "نصف قطر الحضور", "Attendance Radius")}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  المسافة القصوى المسموح للموظف أن يبتعدها عن مركز الفرع.
+                  {tr(language, "المسافة القصوى المسموح للموظف أن يبتعدها عن مركز الفرع.", "Maximum distance an employee may be from the branch center.")}
                 </p>
               </div>
               <div className="shrink-0 rounded-xl bg-black px-3 py-2 text-sm font-black text-white">
-                {Math.round(settings.radiusM)} م
+                {Math.round(settings.radiusM)} {tr(language, "م", "m")}
               </div>
             </div>
             <input
@@ -505,58 +506,54 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                       : "rounded-xl bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700"
                   }
                 >
-                  {value} م
+                  {value} {tr(language, "م", "m")}
                 </button>
               ))}
             </div>
             <label className="mt-4 block text-xs font-bold text-slate-600">
-              قيمة مخصصة بالمتر
-              <input
-                type="number"
+              {tr(language, "قيمة مخصصة بالمتر", "Custom Value in Meters")}
+              <HabatNumberInput
                 min={10}
                 max={5000}
                 value={settings.radiusM}
-                onChange={event =>
+                onValueChange={value =>
                   setSettings({
                     ...settings,
-                    radiusM: clamp(Number(event.target.value) || 10, 10, 5000),
+                    radiusM: clamp(Number(value) || 10, 10, 5000),
                   })
                 }
-                className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-left text-sm"
-                dir="ltr"
+                className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-start text-sm"
               />
             </label>
           </div>
 
           <label className="block text-sm font-bold">
-            أقصى دقة GPS مقبولة بالمتر
-            <input
-              type="number"
+            {tr(language, "أقصى دقة GPS مقبولة بالمتر", "Maximum Accepted GPS Accuracy in Meters")}
+            <HabatNumberInput
               min={10}
               max={1000}
               value={settings.maxAccuracyM}
-              onChange={event =>
+              onValueChange={value =>
                 setSettings({
                   ...settings,
                   maxAccuracyM: clamp(
-                    Number(event.target.value) || 10,
+                    Number(value) || 10,
                     10,
                     1000
                   ),
                 })
               }
-              className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-3 text-left"
-              dir="ltr"
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-3 text-start"
             />
             <span className="mt-2 block text-xs font-normal leading-5 text-slate-500">
-              إذا كانت دقة جهاز الموظف أسوأ من هذه القيمة، يتم رفض البصمة حتى يتحسن GPS.
+              {tr(language, "إذا كانت دقة جهاز الموظف أسوأ من هذه القيمة، يتم رفض البصمة حتى يتحسن GPS.", "If the device GPS accuracy is worse than this value, attendance is rejected until GPS accuracy improves.")}
             </span>
           </label>
 
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <div className="flex items-center gap-2">
               <MapPin size={16} className="shrink-0" />
-              <span>المنطقة الزمنية: Asia/Riyadh</span>
+              <span>{tr(language, "المنطقة الزمنية: Asia/Riyadh", "Timezone: Asia/Riyadh")}</span>
             </div>
           </div>
 
@@ -579,7 +576,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
               className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-black px-5 font-black text-white disabled:opacity-50 sm:w-auto"
             >
               <Save size={18} />
-              {saving ? "جاري الحفظ..." : "حفظ إعدادات الحضور"}
+              {saving ? tr(language, "جاري الحفظ...", "Saving...") : tr(language, "حفظ إعدادات الحضور", "Save Attendance Settings")}
             </button>
           </div>
         </form>

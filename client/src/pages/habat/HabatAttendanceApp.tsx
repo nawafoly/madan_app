@@ -182,7 +182,7 @@ function LiveClock() {
     <div className="rounded-2xl bg-slate-100 px-5 py-4">
       <div className="flex items-center gap-2 font-black">
         <Clock3 size={18} />
-        {now.toLocaleTimeString("ar-SA", {
+        {now.toLocaleTimeString("ar-SA-u-nu-latn", {
           timeZone: "Asia/Riyadh",
           hour: "2-digit",
           minute: "2-digit",

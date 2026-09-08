@@ -59,6 +59,15 @@ export default defineConfig({
 
   server: {
     host: true,
+    proxy: {
+      "/habat-api": {
+        target: "https://upload.maedin2026.workers.dev",
+        changeOrigin: true,
+        secure: true,
+        rewrite: path =>
+          path.replace(/^\/habat-api/, "/attendance/habat"),
+      },
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",

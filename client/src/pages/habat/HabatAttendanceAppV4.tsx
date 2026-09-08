@@ -41,6 +41,8 @@ import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
 import { auth } from "@/_core/firebase";
 import { resolveLoginEmailForAuth } from "@/lib/loginIdentity";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,7 +183,8 @@ type MonthWorkspace = {
 
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
 const AR_WEEKDAYS = ["أحد", "اثن", "ثلث", "ربع", "خميس", "جمع", "سبت"];
-const EN_MONTHS = [
+const EN_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const AR_MONTHS = [
   "يناير",
   "فبراير",
   "مارس",
@@ -194,6 +197,21 @@ const EN_MONTHS = [
   "أكتوبر",
   "نوفمبر",
   "ديسمبر",
+];
+
+const EN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 function westernDigits(value: unknown) {
@@ -256,19 +274,20 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
-function formatMinutes(value?: number | null) {
+function formatMinutes(value: number | null | undefined, language: "ar" | "en" = "ar") {
   if (value == null) return "--";
   const total = Math.max(0, Math.round(Number(value) || 0));
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
-  if (!hours) return `${minutes} دقيقة`;
-  if (!minutes) return `${hours} ساعة`;
-  return `${hours} ساعة و${minutes} دقيقة`;
+  if (!hours) return tr(language, `${minutes} دقيقة`, `${minutes} min`);
+  if (!minutes) return tr(language, `${hours} ساعة`, `${hours} hr`);
+  return tr(language, `${hours} ساعة و${minutes} دقيقة`, `${hours} hr ${minutes} min`);
 }
 
-function monthLabel(month: string) {
+function monthLabel(month: string, language: "ar" | "en" = "ar") {
   const [year, monthNumber] = month.split("-").map(Number);
-  return `${EN_MONTHS[monthNumber - 1] || month} ${year}`;
+  const months = language === "ar" ? AR_MONTHS : EN_MONTHS;
+  return `${months[monthNumber - 1] || month} ${year}`;
 }
 
 function shiftMonth(month: string, amount: number) {
@@ -286,21 +305,22 @@ function monthRange(month: string) {
   };
 }
 
-function extendedError(error: unknown) {
+function extendedError(error: unknown, language: "ar" | "en" = "ar") {
   const code = String((error as { code?: unknown; message?: unknown })?.code || (error as { message?: unknown })?.message || "");
   const map: Record<string, string> = {
     habat_employee_login_required_before_manual_record:
-      "يجب أن يسجل الموظف دخوله إلى حبات الورق مرة واحدة قبل إضافة بصمة يدوية له.",
-    habat_attendance_record_already_exists: "يوجد سجل حضور لهذا اليوم بالفعل.",
-    habat_day_override_exists: "اليوم مسجل كغياب أو إجازة. احذف الحالة أولًا.",
-    habat_day_has_attendance_record: "يوجد حضور فعلي لهذا اليوم. احذف البصمة أولًا إذا أردت تسجيل غياب أو إجازة.",
-    habat_manual_record_fields_required: "حدد الموظف والتاريخ ووقت الحضور.",
-    habat_day_override_fields_required: "تحقق من نوع الحالة وتاريخها.",
+      tr(language, "يجب أن يسجل الموظف دخوله إلى حبات الورق مرة واحدة قبل إضافة بصمة يدوية له.", "The employee must sign in to Habat Alwaraq once before a manual attendance record can be added."),
+    habat_attendance_record_already_exists: tr(language, "يوجد سجل حضور لهذا اليوم بالفعل.", "An attendance record already exists for this day."),
+    habat_day_override_exists: tr(language, "اليوم مسجل كغياب أو إجازة. احذف الحالة أولًا.", "This day is already marked as absence or leave. Remove that status first."),
+    habat_day_has_attendance_record: tr(language, "يوجد حضور فعلي لهذا اليوم. احذف البصمة أولًا إذا أردت تسجيل غياب أو إجازة.", "Attendance exists for this day. Delete the attendance record first if you want to mark absence or leave."),
+    habat_manual_record_fields_required: tr(language, "حدد الموظف والتاريخ ووقت الحضور.", "Select the employee, date, and clock-in time."),
+    habat_day_override_fields_required: tr(language, "تحقق من نوع الحالة وتاريخها.", "Check the status type and date."),
   };
   return map[code] || friendlyHabatError(error);
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
+  const { language } = useLanguage();
   return (
     <div className={compact ? "flex items-center gap-3" : "text-center"}>
       <div
@@ -309,17 +329,18 @@ function Brand({ compact = false }: { compact?: boolean }) {
           compact ? "h-11 w-11 rounded-2xl" : "mx-auto h-28 w-28 rounded-[28px]"
         )}
       >
-        <img src="/habat-alwaraq-logo.svg" alt="حبات الورق" className="h-full w-full object-contain" />
+        <img src="/habat-alwaraq-logo.svg" alt={tr(language, "حبات الورق", "Habat Alwaraq")} className="h-full w-full object-contain" />
       </div>
-      <div className={compact ? "text-right" : "mt-4"}>
-        <h1 className={compact ? "text-lg font-black" : "text-3xl font-black"}>حبات الورق</h1>
-        <p className="mt-1 text-xs font-semibold text-slate-500">نظام الحضور والانصراف</p>
+      <div className={compact ? (language === "ar" ? "text-right" : "text-left") : "mt-4"}>
+        <h1 className={compact ? "text-lg font-black" : "text-3xl font-black"}>{tr(language, "حبات الورق", "Habat Alwaraq")}</h1>
+        <p className="mt-1 text-xs font-semibold text-slate-500">{tr(language, "نظام الحضور والانصراف", "Attendance System")}</p>
       </div>
     </div>
   );
 }
 
 function LoginScreen() {
+  const { language } = useLanguage();
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -334,29 +355,29 @@ function LoginScreen() {
       const email = await resolveLoginEmailForAuth(identity);
       await signInWithEmailAndPassword(auth, email, password);
     } catch {
-      setError("بيانات الدخول غير صحيحة أو الحساب غير موجود.");
+      setError(tr(language, "بيانات الدخول غير صحيحة أو الحساب غير موجود.", "Invalid login details or account not found."));
       setBusy(false);
     }
   }
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#f5f5f3] px-4 py-10 text-slate-950">
+    <main dir={languageDir(language)} className="min-h-screen bg-[#f5f5f3] px-4 py-10 text-slate-950">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <section className="w-full rounded-[32px] border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/40 sm:p-9">
           <Brand />
           <div className="my-7 h-px bg-slate-100" />
           <form className="space-y-4" onSubmit={submit}>
             <div className="space-y-2">
-              <Label>البريد أو اسم المستخدم</Label>
+              <Label>{tr(language, "البريد أو اسم المستخدم", "Email or username")}</Label>
               <Input value={identity} onChange={event => setIdentity(event.target.value)} autoComplete="username" className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
-              <Label>كلمة المرور</Label>
+              <Label>{tr(language, "كلمة المرور", "Password")}</Label>
               <Input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" className="h-12 rounded-2xl bg-slate-50" />
             </div>
             {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
             <Button type="submit" disabled={busy || !identity.trim() || !password} className="h-12 w-full rounded-2xl bg-black">
-              <LogIn className="h-4 w-4" /> {busy ? "جاري الدخول..." : "دخول"}
+              <LogIn className="h-4 w-4" /> {busy ? tr(language, "جاري الدخول...", "Signing in...") : tr(language, "دخول", "Sign In")}
             </Button>
           </form>
         </section>
@@ -366,6 +387,7 @@ function LoginScreen() {
 }
 
 function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: () => Promise<void> }) {
+  const { language } = useLanguage();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -376,7 +398,7 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
 
   async function submitClock() {
     if (!nextType || busy || !context.principal.canClock) return;
-    if (nextType === "check-out" && !window.confirm("تأكيد تسجيل الانصراف؟")) return;
+    if (nextType === "check-out" && !window.confirm(tr(language, "تأكيد تسجيل الانصراف؟", "Confirm clock out?"))) return;
     setBusy(true);
     setMessage("");
     setError("");
@@ -384,7 +406,7 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
       const location = await readBrowserLocation(context.settings.locationRequired);
       await habatApi(`v2/${nextType}`, { method: "POST", body: JSON.stringify(location) });
       await onRefresh();
-      setMessage(nextType === "check-in" ? "تم تسجيل الحضور بنجاح." : "تم تسجيل الانصراف بنجاح.");
+      setMessage(nextType === "check-in" ? tr(language, "تم تسجيل الحضور بنجاح.", "Clock-in recorded successfully.") : tr(language, "تم تسجيل الانصراف بنجاح.", "Clock-out recorded successfully."));
     } catch (caught) {
       setError(extendedError(caught));
     } finally {
@@ -392,27 +414,27 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
     }
   }
 
-  const actionLabel = nextType === "check-in" ? "تسجيل حضور" : nextType === "check-out" ? "تسجيل انصراف" : "تم اكتمال الدوام";
+  const actionLabel = nextType === "check-in" ? tr(language, "تسجيل حضور", "Clock In") : nextType === "check-out" ? tr(language, "تسجيل انصراف", "Clock Out") : tr(language, "تم اكتمال الدوام", "Shift Completed");
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-500">مرحبًا</p>
+          <p className="text-sm text-slate-500">{tr(language, "مرحبًا", "Welcome")}</p>
           <h2 className="mt-1 text-2xl font-black">{context.principal.displayName || context.principal.email}</h2>
           <p className="mt-1 text-sm text-slate-500">{context.principal.email}</p>
         </div>
-        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-left">
+        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-start">
           <p dir="ltr" className="text-lg font-black">
             {new Intl.DateTimeFormat("en-US", { timeZone: RIYADH_TIME_ZONE, hour: "2-digit", minute: "2-digit", hour12: true }).format(new Date())}
           </p>
-          <p className="mt-1 text-xs text-slate-500">بتوقيت الرياض</p>
+          <p className="mt-1 text-xs text-slate-500">{tr(language, "بتوقيت الرياض", "Riyadh Time")}</p>
         </div>
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
-        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">الشفت</p><p className="mt-1 text-sm font-black sm:text-base">{context.shift?.name || "غير محدد"}</p></div>
-        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">الدوام</p><p dir="ltr" className="mt-1 text-sm font-black sm:text-base">{context.shift ? `${context.shift.startTime} - ${context.shift.endTime}` : "--"}</p></div>
-        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">الموقع</p><p className="mt-1 text-sm font-black sm:text-base">{context.settings.locationRequired ? `${context.settings.radiusM} m` : "غير إلزامي"}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الشفت", "Shift")}</p><p className="mt-1 text-sm font-black sm:text-base">{context.shift?.name || "غير محدد"}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الدوام", "Schedule")}</p><p dir="ltr" className="mt-1 text-start text-sm font-black sm:text-base">{context.shift ? `${context.shift.startTime} - ${context.shift.endTime}` : "--"}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الموقع", "Location")}</p><p className="mt-1 text-start text-sm font-black sm:text-base">{context.settings.locationRequired ? <span dir="ltr">{`${context.settings.radiusM} m`}</span> : tr(language, "غير إلزامي", "Not Required")}</p></div>
       </div>
 
       <div className="mt-7 flex flex-col items-center">
@@ -432,10 +454,10 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
       </div>
 
       <div className="mt-7 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="الحضور" value={formatTime(record?.checkInAt)} />
-        <Metric label="الانصراف" value={formatTime(record?.checkOutAt)} />
-        <Metric label="الحالة" value={statusLabel(record?.attendanceStatus)} />
-        <Metric label="ساعات العمل" value={formatMinutes(record?.workedMinutes)} />
+        <Metric label={tr(language, "الحضور", "Clock In")} value={formatTime(record?.checkInAt)} />
+        <Metric label={tr(language, "الانصراف", "Clock Out")} value={formatTime(record?.checkOutAt)} />
+        <Metric label={tr(language, "الحالة", "Status")} value={statusLabel(record?.attendanceStatus)} />
+        <Metric label={tr(language, "ساعات العمل", "Worked Hours")} value={formatMinutes(record?.workedMinutes, language)} />
       </div>
       {message ? <p className="mt-5 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{message}</p> : null}
       {error ? <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
@@ -448,6 +470,7 @@ function Metric({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | null; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { language } = useLanguage();
   const [checkInAt, setCheckInAt] = useState("");
   const [checkOutAt, setCheckOutAt] = useState("");
   const [reason, setReason] = useState("");
@@ -487,17 +510,25 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
 
   return (
     <Dialog open={Boolean(record)} onOpenChange={open => !open && onClose()}>
-      <DialogContent dir="rtl" className="rounded-[28px] sm:max-w-lg">
-        <DialogHeader className="text-right">
-          <DialogTitle>تعديل البصمة</DialogTitle>
+      <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
+        <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}>
+          <DialogTitle>{tr(language, "تعديل البصمة", "Edit Attendance Record")}</DialogTitle>
           <DialogDescription>{record ? `${record.displayName || record.accountEmail} · ${formatDate(record.attendanceDate)}` : ""}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>وقت الحضور</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
-          <div className="space-y-2"><Label>وقت الانصراف</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
-          <div className="space-y-2"><Label>سبب التعديل</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="سبب واضح للتعديل" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "سبب التعديل", "Reason for Edit")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="سبب واضح للتعديل" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
-          <DialogFooter className="gap-2 sm:justify-start"><Button type="submit" disabled={saving || reason.trim().length < 3} className="rounded-xl bg-black"><Save className="h-4 w-4" /> حفظ التعديل</Button><Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>إلغاء</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button type="submit" disabled={saving || reason.trim().length < 3} className="rounded-xl bg-black">
+              <Save className="h-4 w-4" />
+              {tr(language, "حفظ التعديل", "Save Changes")}
+            </Button>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>
+              {tr(language, "إلغاء", "Cancel")}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -505,6 +536,7 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
 }
 
 function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAccessAccount; day: MonthDay | null; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { language } = useLanguage();
   const [checkInAt, setCheckInAt] = useState("");
   const [checkOutAt, setCheckOutAt] = useState("");
   const [reason, setReason] = useState("");
@@ -546,14 +578,22 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
 
   return (
     <Dialog open={Boolean(day)} onOpenChange={open => !open && onClose()}>
-      <DialogContent dir="rtl" className="rounded-[28px] sm:max-w-lg">
-        <DialogHeader className="text-right"><DialogTitle>إضافة بصمة يدوية</DialogTitle><DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription></DialogHeader>
+      <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
+        <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}><DialogTitle>{tr(language, "إضافة بصمة يدوية", "Add Manual Attendance")}</DialogTitle><DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription></DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>وقت الحضور</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
-          <div className="space-y-2"><Label>وقت الانصراف</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
-          <div className="space-y-2"><Label>سبب الإضافة</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "سبب الإضافة", "Reason for Addition")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
-          <DialogFooter className="gap-2 sm:justify-start"><Button type="submit" disabled={saving || reason.trim().length < 3} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> إضافة السجل</Button><Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>إلغاء</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button type="submit" disabled={saving || reason.trim().length < 3} className="rounded-xl bg-black">
+              <Save className="h-4 w-4" />
+              {tr(language, "حفظ التعديل", "Save Changes")}
+            </Button>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>
+              {tr(language, "إلغاء", "Cancel")}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -561,6 +601,7 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
 }
 
 function OverrideDialog({ access, day, type, onClose, onSaved }: { access: HabatAccessAccount; day: MonthDay | null; type: "absence" | "emergency_leave"; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { language } = useLanguage();
   const [portion, setPortion] = useState<"full_day" | "half_day">("full_day");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -589,23 +630,39 @@ function OverrideDialog({ access, day, type, onClose, onSaved }: { access: Habat
 
   return (
     <Dialog open={Boolean(day)} onOpenChange={open => !open && onClose()}>
-      <DialogContent dir="rtl" className="rounded-[28px] sm:max-w-lg">
-        <DialogHeader className="text-right">
-          <DialogTitle>{type === "emergency_leave" ? "تسجيل إجازة مفاجئة" : "تسجيل غياب"}</DialogTitle>
+      <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
+        <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}>
+          <DialogTitle>{type === "emergency_leave" ? tr(language, "تسجيل إجازة مفاجئة", "Record Emergency Leave") : tr(language, "تسجيل غياب", "Record Absence")}</DialogTitle>
           <DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>المدة</Label><Select value={portion} onValueChange={value => setPortion(value as "full_day" | "half_day")}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="full_day">يوم كامل</SelectItem><SelectItem value="half_day">نصف يوم</SelectItem></SelectContent></Select></div>
-          <div className="space-y-2"><Label>ملاحظة / سبب</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="حقل اختياري لتوضيح السبب أو أي ملاحظة داخلية" /></div>
+          <div className="space-y-2"><Label>{tr(language, "المدة", "Duration")}</Label><Select value={portion} onValueChange={value => setPortion(value as "full_day" | "half_day")}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="full_day">{tr(language, "يوم كامل", "Full Day")}</SelectItem><SelectItem value="half_day">{tr(language, "نصف يوم", "Half Day")}</SelectItem></SelectContent></Select></div>
+          <div className="space-y-2"><Label>{tr(language, "ملاحظة / سبب", "Note / Reason")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="حقل اختياري لتوضيح السبب أو أي ملاحظة داخلية" /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
-          <DialogFooter className="gap-2 sm:justify-start"><Button type="submit" disabled={saving} className={cn("rounded-xl", type === "emergency_leave" ? "bg-blue-600 hover:bg-blue-700" : "bg-black")}><Save className="h-4 w-4" /> {type === "emergency_leave" ? "تسجيل الإجازة" : "تسجيل الغياب"}</Button><Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>إلغاء</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              type="submit"
+              disabled={saving}
+              className={cn("rounded-xl", type === "emergency_leave" ? "bg-blue-600 hover:bg-blue-700" : "bg-black")}
+            >
+              <Save className="h-4 w-4" />
+              {type === "emergency_leave"
+                ? tr(language, "تسجيل الإجازة", "Record Leave")
+                : tr(language, "تسجيل الغياب", "Record Absence")}
+            </Button>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={onClose}>
+              {tr(language, "إلغاء", "Cancel")}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function CalendarBoard({ days, selectedDate, onSelect, month, onMonthChange }: { days: MonthDay[]; selectedDate: string; onSelect: (date: string) => void; month: string; onMonthChange: (month: string) => void }) {
+function CalendarBoard({ days, selectedDate, onSelect, month, onMonthChange }: {
+  days: MonthDay[]; selectedDate: string; onSelect: (date: string) => void; month: string; onMonthChange: (month: string) => void }) {
+  const { language } = useLanguage();
   const firstOffset = days[0]?.weekday || 0;
   const cells: Array<MonthDay | null> = [...Array(firstOffset).fill(null), ...days];
   const stateClass = (day: MonthDay) => {
@@ -620,12 +677,12 @@ function CalendarBoard({ days, selectedDate, onSelect, month, onMonthChange }: {
     <section className="rounded-[28px] bg-[#0f172a] p-4 text-white shadow-sm sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <Button type="button" variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => onMonthChange(shiftMonth(month, -1))}><ChevronRight className="h-6 w-6" /></Button>
-        <div className="text-center"><h3 className="text-xl font-black">{EN_MONTHS[Number(month.slice(5, 7)) - 1]}</h3><p className="mt-1 text-lg text-slate-300">{month.slice(0, 4)}</p></div>
+        <div className="text-center"><h3 className="text-xl font-black">{(language === "ar" ? AR_MONTHS : EN_MONTHS)[Number(month.slice(5, 7)) - 1]}</h3><p className="mt-1 text-lg text-slate-300">{month.slice(0, 4)}</p></div>
         <Button type="button" variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/10 hover:text-white" onClick={() => onMonthChange(shiftMonth(month, 1))}><ChevronLeft className="h-6 w-6" /></Button>
       </div>
 
       <div className="mt-5 grid grid-cols-7 gap-y-3 text-center text-xs font-semibold text-slate-400 sm:text-sm">
-        {AR_WEEKDAYS.map(day => <div key={day}>{day}</div>)}
+        {(language === "ar" ? AR_WEEKDAYS : EN_WEEKDAYS).map(day => <div key={day}>{day}</div>)}
       </div>
       <div className="mt-3 grid grid-cols-7 gap-y-3 text-center">
         {cells.map((day, index) => day ? (
@@ -634,11 +691,11 @@ function CalendarBoard({ days, selectedDate, onSelect, month, onMonthChange }: {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 rounded-2xl border border-white/15 px-3 py-3 text-[11px] text-slate-200 sm:text-xs">
-        <Legend color="bg-emerald-400" label="حضور مكتمل" />
-        <Legend color="bg-orange-500" label="اليوم المحدد" />
-        <Legend color="bg-rose-900" label="نقص/تأخير/غياب" />
-        <Legend color="bg-blue-500" label="إجازة" />
-        <Legend color="bg-slate-300" label="لا يوجد سجل" />
+        <Legend color="bg-emerald-400" label={tr(language, "حضور مكتمل", "Complete Attendance")} />
+        <Legend color="bg-orange-500" label={tr(language, "اليوم المحدد", "Selected Day")} />
+        <Legend color="bg-rose-900" label={tr(language, "نقص/تأخير/غياب", "Shortage / Late / Absence")} />
+        <Legend color="bg-blue-500" label={tr(language, "إجازة", "Leave")} />
+        <Legend color="bg-slate-300" label={tr(language, tr(language, "لا يوجد سجل", "No Record"), "No Record")} />
       </div>
     </section>
   );
@@ -649,6 +706,7 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 function DayDetails({ day }: { day: MonthDay | null }) {
+  const { language } = useLanguage();
   if (!day) return null;
   const scheduledMinutes = day.shift ? scheduleMinutes(day.shift.startTime, day.shift.endTime) : 0;
   const worked = Number(day.record?.workedMinutes || 0);
@@ -656,33 +714,33 @@ function DayDetails({ day }: { day: MonthDay | null }) {
   const overtime = Math.max(0, diff);
   const shortage = Math.max(0, -diff);
   const adminState = day.override?.type === "emergency_leave"
-    ? "إجازة مفاجئة معتمدة"
+    ? tr(language, "إجازة مفاجئة معتمدة", "Approved Emergency Leave")
     : day.override?.type === "absence"
-      ? "غياب مسجل"
+      ? tr(language, "غياب مسجل", "Recorded Absence")
       : day.record?.checkInAt && day.record?.checkOutAt
-        ? "بصمة مكتملة"
+        ? tr(language, "بصمة مكتملة", "Complete Attendance")
         : day.record?.checkInAt
-          ? "بصمة غير مكتملة"
+          ? tr(language, "بصمة غير مكتملة", "Incomplete Attendance")
           : day.state === "off"
-            ? "يوم راحة"
-            : "لا يوجد سجل";
+            ? tr(language, "يوم راحة", "Rest Day")
+            : tr(language, "لا يوجد سجل", "No Record");
 
   return (
     <div className="space-y-4">
       {!day.record && !day.override && day.state !== "off" && day.state !== "future" ? (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"><h4 className="font-black">لم يتم تسجيل حضور لهذا اليوم حتى الآن</h4><p className="mt-1 text-sm text-slate-500">لا توجد بيانات حضور فعلية لليوم المحدد.</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"><h4 className="font-black">{tr(language, "لم يتم تسجيل حضور لهذا اليوم حتى الآن", "No attendance has been recorded for this day yet")}</h4><p className="mt-1 text-sm text-slate-500">{tr(language, "لا توجد بيانات حضور فعلية لليوم المحدد.", "There is no actual attendance data for the selected day.")}</p></div>
       ) : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="الدوام المعتمد" value={day.shift ? `${day.shift.startTime} — ${day.shift.endTime}` : "--"} />
-        <Metric label="أول حضور" value={formatTime(day.record?.checkInAt)} />
-        <Metric label="آخر انصراف" value={formatTime(day.record?.checkOutAt)} />
-        <Metric label="مدة العمل الفعلية" value={formatMinutes(day.record?.workedMinutes)} />
-        <Metric label="صافي فرق الساعات" value={day.record ? (diff >= 0 ? `زيادة ${formatMinutes(diff)}` : `نقص ${formatMinutes(-diff)}`) : `نقص ${formatMinutes(scheduledMinutes)}`} />
-        <Metric label="الحالة الإدارية" value={adminState} />
-        <Metric label="التأخير الفعلي" value={formatMinutes(day.record?.lateMinutes || 0)} />
-        <Metric label="عمل بعد نهاية الدوام" value={formatMinutes(overtime)} />
-        <Metric label="نقص الساعات" value={formatMinutes(day.record ? shortage : scheduledMinutes)} />
-        <Metric label="زيادة ساعات" value={formatMinutes(overtime)} />
+        <Metric label={tr(language, "الدوام المعتمد", "Scheduled Shift")} value={day.shift ? `${day.shift.startTime} — ${day.shift.endTime}` : "--"} />
+        <Metric label={tr(language, "أول حضور", "First Clock In")} value={formatTime(day.record?.checkInAt)} />
+        <Metric label={tr(language, "آخر انصراف", "Last Clock Out")} value={formatTime(day.record?.checkOutAt)} />
+        <Metric label={tr(language, "مدة العمل الفعلية", "Actual Worked Time")} value={formatMinutes(day.record?.workedMinutes, language)} />
+        <Metric label={tr(language, "صافي فرق الساعات", "Net Hours Difference")} value={day.record ? (diff >= 0 ? `زيادة ${formatMinutes(diff, language)}` : `نقص ${formatMinutes(-diff, language)}`) : `نقص ${formatMinutes(scheduledMinutes)}`} />
+        <Metric label={tr(language, "الحالة الإدارية", "Administrative Status")} value={adminState} />
+        <Metric label={tr(language, "التأخير الفعلي", "Actual Late Time")} value={formatMinutes(day.record?.lateMinutes || 0, language)} />
+        <Metric label={tr(language, "عمل بعد نهاية الدوام", "Work After Shift End")} value={formatMinutes(overtime, language)} />
+        <Metric label={tr(language, "نقص الساعات", "Hours Shortage")} value={formatMinutes(day.record ? shortage : scheduledMinutes, language)} />
+        <Metric label={tr(language, "زيادة ساعات", "Extra Hours")} value={formatMinutes(overtime, language)} />
       </div>
     </div>
   );
@@ -696,7 +754,9 @@ function scheduleMinutes(startTime: string, endTime: string) {
   return total;
 }
 
-function AttendanceMonthWorkspace({ access, manager, onBack }: { access?: HabatAccessAccount; manager: boolean; onBack?: () => void }) {
+function AttendanceMonthWorkspace({ access, manager, onBack }: {
+  access?: HabatAccessAccount; manager: boolean; onBack?: () => void }) {
+  const { language } = useLanguage();
   const today = todayRiyadhKey();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [workspace, setWorkspace] = useState<MonthWorkspace | null>(null);
@@ -735,7 +795,7 @@ function AttendanceMonthWorkspace({ access, manager, onBack }: { access?: HabatA
   const absences = workspace?.overrides.filter(item => item.type === "absence") || [];
 
   async function deleteRecord(record: HabatRecord) {
-    if (!window.confirm(`مسح بصمة ${formatDate(record.attendanceDate)}؟ سيتم الاحتفاظ بالعملية في سجل التدقيق.`)) return;
+    if (!window.confirm(tr(language, `مسح بصمة ${formatDate(record.attendanceDate)}؟ سيتم الاحتفاظ بالعملية في سجل التدقيق.`, `Delete attendance for ${formatDate(record.attendanceDate)}? The action will remain in the audit log.`))) return;
     setError("");
     try {
       await habatApi(`v3/records/${encodeURIComponent(record.id)}`, { method: "DELETE" });
@@ -744,7 +804,7 @@ function AttendanceMonthWorkspace({ access, manager, onBack }: { access?: HabatA
   }
 
   async function deleteOverride(override: DayOverride) {
-    if (!window.confirm("حذف الحالة المسجلة لهذا اليوم؟")) return;
+    if (!window.confirm(tr(language, "حذف الحالة المسجلة لهذا اليوم؟", "Delete the recorded status for this day?"))) return;
     try {
       await habatApi(`v3/day-overrides/${encodeURIComponent(override.id)}`, { method: "DELETE" });
       await refresh();
@@ -775,65 +835,72 @@ function AttendanceMonthWorkspace({ access, manager, onBack }: { access?: HabatA
       {manager && effectiveAccess ? (
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>{onBack ? <Button type="button" variant="ghost" className="mb-2 -mr-3 rounded-xl" onClick={onBack}>← رجوع للموظفين</Button> : null}<h2 className="text-2xl font-black">{effectiveAccess.displayName || effectiveAccess.email}</h2><p className="mt-1 text-sm text-slate-500">{effectiveAccess.email}</p></div>
-            <div className="w-full sm:w-[200px]"><Label className="mb-2 block text-xs">الشهر</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>
+            <div>{onBack ? <Button type="button" variant="ghost" className="mb-2 -mr-3 rounded-xl" onClick={onBack}>{tr(language, "← رجوع للموظفين", "← Back to Employees")}</Button> : null}<h2 className="text-2xl font-black">{effectiveAccess.displayName || effectiveAccess.email}</h2><p className="mt-1 text-sm text-slate-500">{effectiveAccess.email}</p></div>
+            <div className="w-full sm:w-[200px]"><Label className="mb-2 block text-xs">{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>
           </div>
         </section>
       ) : null}
 
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
-      {loading || !workspace ? <div className="rounded-[28px] border border-slate-200 bg-white py-16 text-center text-sm text-slate-500"><RefreshCw className="mx-auto mb-3 h-5 w-5 animate-spin" />جاري تحميل الحضور...</div> : (
+      {loading || !workspace ? (
+        <div className="rounded-[28px] border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">
+          <RefreshCw className="mx-auto mb-3 h-5 w-5 animate-spin" />
+          {tr(language, "جاري تحميل الحضور...", "Loading attendance...")}
+        </div>
+      ) : (
         <>
           <CalendarBoard days={workspace.days} selectedDate={selectedDate} onSelect={setSelectedDate} month={month} onMonthChange={setMonth} />
 
-          <Tabs defaultValue="records" dir="rtl" className="gap-4">
+          <Tabs defaultValue="records" dir={languageDir(language)} className="gap-4">
             <TabsList className="h-12 w-full rounded-2xl bg-white p-1 shadow-sm sm:w-auto">
-              <TabsTrigger value="records" className="h-10 rounded-xl px-8">السجلات</TabsTrigger>
-              <TabsTrigger value="leaves" className="h-10 rounded-xl px-8">إجازتي</TabsTrigger>
+              <TabsTrigger value="records" className="h-10 rounded-xl px-8">{tr(language, "السجلات", "Records")}</TabsTrigger>
+              <TabsTrigger value="leaves" className="h-10 rounded-xl px-8">{tr(language, "إجازتي", "My Leave")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="records" className="space-y-5">
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                  <div><h3 className="font-black">{formatDate(selectedDate)}</h3><p className="mt-1 text-xs text-slate-500">{selectedDay ? AR_WEEKDAYS[selectedDay.weekday] : ""}</p></div>
-                  {manager && selectedDay ? <div className="flex flex-wrap gap-2">
-                    {selectedDay.record ? <><Button type="button" variant="outline" className="rounded-xl" onClick={() => setEditing(selectedDay.record)}><Edit3 className="h-4 w-4" /> تعديل البصمة</Button><Button type="button" variant="outline" className="rounded-xl border-red-200 text-red-600" onClick={() => void deleteRecord(selectedDay.record!)}><Trash2 className="h-4 w-4" /> مسح البصمة</Button></> : selectedDay.state !== "off" && selectedDay.state !== "future" && !selectedDay.override ? <Button type="button" variant="outline" className="rounded-xl" onClick={() => setManualDay(selectedDay)}><Plus className="h-4 w-4" /> إضافة بصمة</Button> : null}
-                    {selectedDay.override ? <Button type="button" variant="outline" className="rounded-xl border-red-200 text-red-600" onClick={() => void deleteOverride(selectedDay.override!)}><Trash2 className="h-4 w-4" /> حذف الحالة</Button> : null}
-                  </div> : null}
+                  <div>
+                    <h3 className="font-black">{tr(language, "ملخص الحضور الشهري", "Monthly Attendance Summary")}</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {tr(language, "اختر شهرًا لتوليد أو عرض الملخص المحفوظ بدون حذف أو أرشفة السجلات.", "Select a month to generate or view the saved summary without deleting or archiving attendance records.")}
+                    </p>
+                  </div>
+                  {manager ? (
+                    <Button type="button" className="rounded-xl bg-black" disabled={summaryBusy} onClick={() => void generateSummary()}>
+                      <Save className="h-4 w-4" />
+                      {summaryBusy
+                        ? tr(language, "جاري التوليد...", "Generating...")
+                        : tr(language, "توليد ملخص الشهر", "Generate Monthly Summary")}
+                    </Button>
+                  ) : null}
                 </div>
-                <div className="mt-5"><DayDetails day={selectedDay} /></div>
+                {workspace.savedSummary ? (
+                  <SummaryCards summary={workspace.savedSummary.summary} generatedAt={workspace.savedSummary.generatedAt} />
+                ) : (
+                  <p className="mt-5 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    {manager
+                      ? tr(language, "لا يوجد ملخص محفوظ لهذا الشهر بعد. اضغط «توليد ملخص الشهر» لإنشاء القراءة الأولى.", "No saved summary exists for this month yet. Select Generate Monthly Summary to create the first snapshot.")
+                      : tr(language, "لا يوجد ملخص محفوظ لهذا الشهر بعد.", "No saved summary exists for this month yet.")}
+                  </p>
+                )}
               </section>
 
-              {manager && selectedDay && !selectedDay.record && !selectedDay.override && selectedDay.state !== "off" && selectedDay.state !== "future" ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <button type="button" onClick={() => openOverride(selectedDay, "emergency_leave")} className="rounded-[24px] border border-blue-200 bg-blue-50 p-5 text-right transition hover:bg-blue-100"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white"><Umbrella className="h-5 w-5" /></span><div><h3 className="font-black">إجازة مفاجئة لليوم</h3><p className="mt-1 text-xs leading-5 text-blue-700">يسجل اليوم كإجازة اضطرارية معتمدة ويستبعده من الغياب والحسابات المرتبطة بالحضور.</p></div></div></button>
-                  <button type="button" onClick={() => openOverride(selectedDay, "absence")} className="rounded-[24px] border border-slate-200 bg-white p-5 text-right transition hover:bg-slate-50"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white"><UserX className="h-5 w-5" /></span><div><h3 className="font-black">تسجيل غياب</h3><p className="mt-1 text-xs leading-5 text-slate-500">سجل الغياب الحالي أو بأثر رجعي من قسم الحضور.</p></div></div></button>
-                </div>
-              ) : null}
-
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div><h3 className="font-black">ملخص الحضور الشهري</h3><p className="mt-1 text-sm text-slate-500">اختر شهرًا لتوليد أو عرض الملخص المحفوظ بدون حذف أو أرشفة للسجلات.</p></div>
-                  {manager ? <Button type="button" className="rounded-xl bg-black" disabled={summaryBusy} onClick={() => void generateSummary()}><Save className="h-4 w-4" /> {summaryBusy ? "جاري التوليد..." : "توليد ملخص الشهر"}</Button> : null}
-                </div>
-                {workspace.savedSummary ? <SummaryCards summary={workspace.savedSummary.summary} generatedAt={workspace.savedSummary.generatedAt} /> : <p className="mt-5 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">لا يوجد ملخص محفوظ لهذا الشهر بعد.{manager ? " اضغط «توليد ملخص الشهر» لإنشاء القراءة الأولى." : ""}</p>}
-              </section>
-
-              <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h3 className="font-black">سجل الغياب</h3>
-                {absences.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className="text-right">التاريخ</TableHead><TableHead className="text-right">المدة</TableHead><TableHead className="text-right">الملاحظة</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{absences.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? "نصف يوم" : "يوم كامل"}</TableCell><TableCell>{item.reason || "—"}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">لا توجد غيابات مسجلة لهذا الموظف حتى الآن.</p>}
+                <h3 className="font-black">{tr(language, "سجل الغياب", "Absence Log")}</h3>
+                {absences.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{absences.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || "—"}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد غيابات مسجلة لهذا الموظف حتى الآن.", "No absences recorded for this employee yet.")}</p>}
               </section>
             </TabsContent>
 
             <TabsContent value="leaves">
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h3 className="font-black">الإجازات المسجلة</h3>
-                {leaves.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className="text-right">التاريخ</TableHead><TableHead className="text-right">المدة</TableHead><TableHead className="text-right">الملاحظة</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{leaves.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? "نصف يوم" : "يوم كامل"}</TableCell><TableCell>{item.reason || "إجازة مفاجئة معتمدة"}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">لا توجد إجازات مسجلة لهذا الشهر.</p>}
+                <h3 className="font-black">{tr(language, "الإجازات المسجلة", "Recorded Leave")}</h3>
+                {leaves.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{leaves.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || tr(language, "إجازة مفاجئة معتمدة", "Approved Emergency Leave")}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد إجازات مسجلة لهذا الشهر.", "No leave recorded for this month.")}</p>}
               </section>
             </TabsContent>
           </Tabs>
 
-          <p className="px-1 text-sm text-slate-500">{monthLabel(month)} · أيام بها حضور: {attendanceCount}</p>
+          <p className="px-1 text-sm text-slate-500">{monthLabel(month, language)} · {tr(language, "أيام بها حضور", "Days with attendance")}: {attendanceCount}</p>
         </>
       )}
 
@@ -845,14 +912,36 @@ function AttendanceMonthWorkspace({ access, manager, onBack }: { access?: HabatA
 }
 
 function SummaryCards({ summary, generatedAt }: { summary: MonthlySummary; generatedAt: string }) {
+  const { language } = useLanguage();
   const cards: Array<[string, ReactNode]> = [
-    ["أيام الدوام", summary.scheduledDays], ["الحضور", summary.attendedDays], ["الغياب", summary.absentDays], ["الإجازة", summary.emergencyLeaveDays],
-    ["التأخير", summary.lateDays], ["الخروج المبكر", summary.earlyLeaveDays], ["ناقص انصراف", summary.incompleteDays], ["ساعات العمل", formatMinutes(summary.workedMinutes)],
+    [tr(language, "أيام الدوام", "Scheduled Days"), summary.scheduledDays],
+    [tr(language, "الحضور", "Attendance"), summary.attendedDays],
+    [tr(language, "الغياب", "Absence"), summary.absentDays],
+    [tr(language, "الإجازة", "Leave"), summary.emergencyLeaveDays],
+    [tr(language, "التأخير", "Late"), summary.lateDays],
+    [tr(language, "الخروج المبكر", "Early Leave"), summary.earlyLeaveDays],
+    [tr(language, "ناقص انصراف", "Incomplete Clock-out"), summary.incompleteDays],
+    [tr(language, "ساعات العمل", "Worked Hours"), formatMinutes(summary.workedMinutes, language)],
   ];
-  return <><div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">{cards.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</div><p className="mt-3 text-xs text-slate-400">آخر توليد: {new Intl.DateTimeFormat("en-GB", { timeZone: RIYADH_TIME_ZONE, dateStyle: "medium", timeStyle: "short" }).format(new Date(generatedAt))}</p></>;
+  return (
+    <>
+      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {cards.map(([label, value]) => <Metric key={label} label={label} value={value} />)}
+      </div>
+      <p className="mt-3 text-xs text-slate-400">
+        {tr(language, "آخر توليد", "Last generated")}:{" "}
+        {new Intl.DateTimeFormat(language === "ar" ? "ar-SA-u-nu-latn" : "en-GB", {
+          timeZone: RIYADH_TIME_ZONE,
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(generatedAt))}
+      </p>
+    </>
+  );
 }
 
 function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAccessAccount) => void }) {
+  const { language } = useLanguage();
   const [accounts, setAccounts] = useState<HabatAccessAccount[]>([]);
   const [error, setError] = useState("");
   const refresh = useCallback(async () => {
@@ -870,11 +959,11 @@ function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAcce
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black">الموظفون</h2>
-            <p className="mt-1 text-sm text-slate-500">اختر الموظف لفتح ملفه الكامل وإدارة الدوام والحضور والإجازات والراتب.</p>
+            <h2 className="text-xl font-black">{tr(language, "الموظفون", "Employees")}</h2>
+            <p className="mt-1 text-sm text-slate-500">{tr(language, "اختر الموظف لفتح ملفه الكامل وإدارة الدوام والحضور والإجازات والراتب.", "Select an employee to open the full file and manage schedule, attendance, leave, and payroll.")}</p>
           </div>
           <Button variant="outline" className="rounded-xl" onClick={() => void refresh()}>
-            <RefreshCw className="h-4 w-4" /> تحديث
+            <RefreshCw className="h-4 w-4" /> {tr(language, "تحديث", "Refresh")}
           </Button>
         </div>
         {error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -887,7 +976,7 @@ function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAcce
               key={account.id}
               type="button"
               onClick={() => onOpenEmployee(account)}
-              className="group min-h-[190px] rounded-[28px] border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
+              className={`group min-h-[190px] rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 ${language === "ar" ? "text-right" : "text-left"}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -901,17 +990,17 @@ function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAcce
 
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold text-slate-500">الصلاحية</p>
-                  <p className="mt-1 font-black">{account.accessLevel === "manager" ? "إدارة" : "موظف"}</p>
+                  <p className="text-xs font-semibold text-slate-500">{tr(language, "الصلاحية", "Access")}</p>
+                  <p className="mt-1 font-black">{account.accessLevel === "manager" ? tr(language, "إدارة", "Manager") : tr(language, "موظف", "Employee")}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold text-slate-500">البصمة</p>
-                  <p className="mt-1 font-black">{account.clockEnabled ? "مفعلة" : "غير مفعلة"}</p>
+                  <p className="text-xs font-semibold text-slate-500">{tr(language, "البصمة", "Attendance")}</p>
+                  <p className="mt-1 font-black">{account.clockEnabled ? tr(language, "مفعلة", "Enabled") : tr(language, "غير مفعلة", "Disabled")}</p>
                 </div>
               </div>
 
               <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-black">
-                <span>فتح ملف الموظف</span>
+                <span>{tr(language, "فتح ملف الموظف", "Open Employee File")}</span>
                 <ChevronLeft className="h-4 w-4 transition group-hover:-translate-x-1" />
               </div>
             </button>
@@ -919,7 +1008,7 @@ function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAcce
         </section>
       ) : (
         <section className="rounded-[28px] border border-slate-200 bg-white py-14 text-center text-sm text-slate-500">
-          لا توجد حسابات موظفين مفعلة.
+          {tr(language, "لا توجد حسابات موظفين مفعلة.", "No active employee accounts.")}
         </section>
       )}
     </div>
@@ -927,6 +1016,7 @@ function EmployeesPage({ onOpenEmployee }: { onOpenEmployee: (account: HabatAcce
 }
 
 function ManagerRecordsPage() {
+  const { language } = useLanguage();
   const today = todayRiyadhKey();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [employeeEmail, setEmployeeEmail] = useState("all");
@@ -953,19 +1043,22 @@ function ManagerRecordsPage() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function remove(record: HabatRecord) {
-    if (!window.confirm(`مسح بصمة ${record.displayName || record.accountEmail} بتاريخ ${formatDate(record.attendanceDate)}؟`)) return;
+    if (!window.confirm(tr(language, `مسح بصمة ${record.displayName || record.accountEmail} بتاريخ ${formatDate(record.attendanceDate)}؟`, `Delete attendance for ${record.displayName || record.accountEmail} on ${formatDate(record.attendanceDate)}?`))) return;
     try { await habatApi(`v3/records/${encodeURIComponent(record.id)}`, { method: "DELETE" }); await refresh(); }
     catch (caught) { setError(extendedError(caught)); }
   }
 
-  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="grid gap-3 md:grid-cols-3"><div className="space-y-2"><Label>الشهر</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div><div className="space-y-2"><Label>الموظف</Label><Select value={employeeEmail} onValueChange={setEmployeeEmail}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">جميع الموظفين</SelectItem>{accounts.filter(account => account.isActive).map(account => <SelectItem key={account.id} value={account.email}>{account.displayName || account.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>الحالة</Label><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem><SelectItem value="present">حاضر</SelectItem><SelectItem value="late">متأخر</SelectItem><SelectItem value="early_leave">انصراف مبكر</SelectItem><SelectItem value="late_early_leave">متأخر + انصراف مبكر</SelectItem></SelectContent></Select></div></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section><RecordsTable records={records} onEdit={setEditing} onDelete={record => void remove(record)} /><CorrectionDialog record={editing} onClose={() => setEditing(null)} onSaved={refresh} /></div>;
+  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="grid gap-3 md:grid-cols-3"><div className="space-y-2"><Label>{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div><div className="space-y-2"><Label>{tr(language, "الموظف", "Employee")}</Label><Select value={employeeEmail} onValueChange={setEmployeeEmail}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{tr(language, "جميع الموظفين", "All Employees")}</SelectItem>{accounts.filter(account => account.isActive).map(account => <SelectItem key={account.id} value={account.email}>{account.displayName || account.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr(language, "الحالة", "Status")}</Label><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{tr(language, "كل الحالات", "All Statuses")}</SelectItem><SelectItem value="present">{tr(language, "حاضر", "Present")}</SelectItem><SelectItem value="late">{tr(language, "متأخر", "Late")}</SelectItem><SelectItem value="early_leave">{tr(language, "انصراف مبكر", "Early Leave")}</SelectItem><SelectItem value="late_early_leave">{tr(language, "متأخر + انصراف مبكر", "Late + Early Leave")}</SelectItem></SelectContent></Select></div></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section><RecordsTable records={records} onEdit={setEditing} onDelete={record => void remove(record)} /><CorrectionDialog record={editing} onClose={() => setEditing(null)} onSaved={refresh} /></div>;
 }
 
-function RecordsTable({ records, onEdit, onDelete }: { records: HabatRecord[]; onEdit?: (record: HabatRecord) => void; onDelete?: (record: HabatRecord) => void }) {
-  return <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[980px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-right">الموظف</TableHead><TableHead className="text-right">التاريخ</TableHead><TableHead className="text-right">الحالة</TableHead><TableHead className="text-right">الحضور</TableHead><TableHead className="text-right">الانصراف</TableHead><TableHead className="text-right">التأخير</TableHead><TableHead className="text-right">الخروج المبكر</TableHead><TableHead className="text-right">العمل</TableHead>{onEdit || onDelete ? <TableHead className="text-right">الإجراءات</TableHead> : null}</TableRow></TableHeader><TableBody>{records.map(record => <TableRow key={record.id}><TableCell><p className="font-black">{record.displayName || record.accountEmail}</p><p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p></TableCell><TableCell>{formatDate(record.attendanceDate)}</TableCell><TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell><TableCell>{formatTime(record.checkInAt)}</TableCell><TableCell>{formatTime(record.checkOutAt)}</TableCell><TableCell>{formatMinutes(record.lateMinutes)}</TableCell><TableCell>{formatMinutes(record.earlyLeaveMinutes)}</TableCell><TableCell>{formatMinutes(record.workedMinutes)}</TableCell>{onEdit || onDelete ? <TableCell><div className="flex gap-1">{onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}{onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}</div></TableCell> : null}</TableRow>)}</TableBody></Table></div>{!records.length ? <p className="py-10 text-center text-sm text-slate-500">لا توجد سجلات لهذا الاختيار.</p> : null}</section>;
+function RecordsTable({ records, onEdit, onDelete }: {
+  records: HabatRecord[]; onEdit?: (record: HabatRecord) => void; onDelete?: (record: HabatRecord) => void }) {
+  const { language } = useLanguage();
+  return <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[980px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحالة", "Status")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحضور", "Clock In")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الانصراف", "Clock Out")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التأخير", "Late")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الخروج المبكر", "Early Leave")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead>{onEdit || onDelete ? <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الإجراءات", "Actions")}</TableHead> : null}</TableRow></TableHeader><TableBody>{records.map(record => <TableRow key={record.id}><TableCell><p className="font-black">{record.displayName || record.accountEmail}</p><p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p></TableCell><TableCell>{formatDate(record.attendanceDate)}</TableCell><TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell><TableCell>{formatTime(record.checkInAt)}</TableCell><TableCell>{formatTime(record.checkOutAt)}</TableCell><TableCell>{formatMinutes(record.lateMinutes, language)}</TableCell><TableCell>{formatMinutes(record.earlyLeaveMinutes, language)}</TableCell><TableCell>{formatMinutes(record.workedMinutes, language)}</TableCell>{onEdit || onDelete ? <TableCell><div className="flex gap-1">{onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}{onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}</div></TableCell> : null}</TableRow>)}</TableBody></Table></div>{!records.length ? <p className="py-10 text-center text-sm text-slate-500">{tr(language, "لا توجد سجلات لهذا الاختيار.", "No records for this selection.")}</p> : null}</section>;
 }
 
 function ReportsPage() {
+  const { language } = useLanguage();
   const today = todayRiyadhKey();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [report, setReport] = useState<HabatReport | null>(null);
@@ -977,35 +1070,62 @@ function ReportsPage() {
   }, [month, today]);
   useEffect(() => { void refresh(); }, [refresh]);
   const totals = report?.totals;
-  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>الشهر</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["أيام الدوام", totals.scheduledDays], ["حضور", totals.attendedDays], ["غياب", totals.absentDays], ["تأخير", totals.lateDays], ["خروج مبكر", totals.earlyLeaveDays], ["ناقص انصراف", totals.incompleteDays], ["ساعات العمل", formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow><TableHead className="text-right">الموظف</TableHead><TableHead className="text-right">أيام الدوام</TableHead><TableHead className="text-right">حضور</TableHead><TableHead className="text-right">غياب</TableHead><TableHead className="text-right">تأخير</TableHead><TableHead className="text-right">خروج مبكر</TableHead><TableHead className="text-right">العمل</TableHead></TableRow></TableHeader><TableBody>{report?.employees.map(employee => <TableRow key={employee.accessId}><TableCell>{employee.displayName}</TableCell><TableCell>{employee.scheduledDays}</TableCell><TableCell>{employee.attendedDays}</TableCell><TableCell>{employee.absentDays}</TableCell><TableCell>{employee.lateDays}</TableCell><TableCell>{employee.earlyLeaveDays}</TableCell><TableCell>{formatMinutes(employee.workedMinutes)}</TableCell></TableRow>)}</TableBody></Table></div></section></div>;
+  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[[tr(language, "أيام الدوام", "Scheduled Days"), totals.scheduledDays], [tr(language, "حضور", "Attendance"), totals.attendedDays], [tr(language, "غياب", "Absence"), totals.absentDays], [tr(language, "تأخير", "Late"), totals.lateDays], [tr(language, "خروج مبكر", "Early Leave"), totals.earlyLeaveDays], [tr(language, "ناقص انصراف", "Incomplete Clock-out"), totals.incompleteDays], [tr(language, "ساعات العمل", "Worked Hours"), formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "أيام الدوام", "Scheduled Days")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "حضور", "Attendance")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "غياب", "Absence")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "تأخير", "Late")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "خروج مبكر", "Early Leave")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead></TableRow></TableHeader><TableBody>{report?.employees.map(employee => <TableRow key={employee.accessId}><TableCell>{employee.displayName}</TableCell><TableCell>{employee.scheduledDays}</TableCell><TableCell>{employee.attendedDays}</TableCell><TableCell>{employee.absentDays}</TableCell><TableCell>{employee.lateDays}</TableCell><TableCell>{employee.earlyLeaveDays}</TableCell><TableCell>{formatMinutes(employee.workedMinutes)}</TableCell></TableRow>)}</TableBody></Table></div></section></div>;
 }
 
 type NavItem = { key: PageKey; label: string; icon: typeof Clock3 };
 
 function SidebarNav({ items, page, onChange }: { items: NavItem[]; page: PageKey; onChange: (page: PageKey) => void }) {
-  return <nav className="flex flex-col gap-2">{items.map(item => { const Icon = item.icon; const active = page === item.key || (page === "employee-file" && item.key === "employees"); return <button key={item.key} type="button" onClick={() => onChange(item.key)} className={cn("flex items-center gap-3 rounded-2xl px-4 py-3 text-right text-sm font-bold transition", active ? "bg-black text-white" : "text-slate-600 hover:bg-slate-100")}><Icon className="h-5 w-5 shrink-0" /><span>{item.label}</span></button>; })}</nav>;
+  const { language } = useLanguage();
+
+  return (
+    <nav className="flex flex-col gap-2">
+      {items.map(item => {
+        const Icon = item.icon;
+        const active = page === item.key || (page === "employee-file" && item.key === "employees");
+
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onChange(item.key)}
+            className={cn(
+              "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition",
+              language === "ar" ? "text-right" : "text-left",
+              active ? "bg-black text-white" : "text-slate-600 hover:bg-slate-100"
+            )}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 function AttendanceShell({ context, onContextRefresh }: { context: HabatContext; onContextRefresh: () => Promise<void> }) {
+  const { language, toggleLanguage } = useLanguage();
+  const dir = languageDir(language);
   const [page, setPage] = useState<PageKey>("clock");
   const [selectedEmployee, setSelectedEmployee] = useState<HabatAccessAccount | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const managerItems: NavItem[] = [
-    { key: "clock", label: "الحضور والانصراف", icon: Fingerprint },
-    { key: "dashboard", label: "الرئيسية", icon: ShieldCheck },
-    { key: "employees", label: "الموظفون", icon: Users },
-    { key: "accounts", label: "إدارة الحسابات", icon: UserCog },
-    { key: "shifts", label: "الدوام والشفتات", icon: CalendarClock },
-    { key: "records", label: "سجل الحضور", icon: CalendarCheck2 },
-    { key: "reports", label: "التقارير", icon: BarChart3 },
-    { key: "audit", label: "سجل التدقيق", icon: FileClock },
-    { key: "settings", label: "الإعدادات", icon: Settings2 },
+    { key: "clock", label: tr(language, "الحضور والانصراف", "Clock In / Out"), icon: Fingerprint },
+    { key: "dashboard", label: tr(language, "الرئيسية", "Dashboard"), icon: ShieldCheck },
+    { key: "employees", label: tr(language, "الموظفون", "Employees"), icon: Users },
+    { key: "accounts", label: tr(language, "إدارة الحسابات", "Account Management"), icon: UserCog },
+    { key: "shifts", label: tr(language, "الدوام والشفتات", "Schedules & Shifts"), icon: CalendarClock },
+    { key: "records", label: tr(language, "سجل الحضور", "Attendance Records"), icon: CalendarCheck2 },
+    { key: "reports", label: tr(language, "التقارير", "Reports"), icon: BarChart3 },
+    { key: "audit", label: tr(language, "سجل التدقيق", "Audit Log"), icon: FileClock },
+    { key: "settings", label: tr(language, "الإعدادات", "Settings"), icon: Settings2 },
   ];
   const employeeItems: NavItem[] = [
-    { key: "clock", label: "الحضور والانصراف", icon: Fingerprint },
-    { key: "history", label: "سجلي", icon: CalendarCheck2 },
-    { key: "profile", label: "صفحتي", icon: UserRound },
+    { key: "clock", label: tr(language, "الحضور والانصراف", "Clock In / Out"), icon: Fingerprint },
+    { key: "history", label: tr(language, "سجلي", "My Attendance"), icon: CalendarCheck2 },
+    { key: "profile", label: tr(language, "صفحتي", "My Profile"), icon: UserRound },
   ];
   const items = context.principal.canManage ? managerItems : employeeItems;
 
@@ -1048,21 +1168,52 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
   }, [context, onContextRefresh, page, selectedEmployee]);
 
   return (
-    <main dir="rtl" className="habat-attendance-shell min-h-screen bg-[#f5f5f3] text-slate-950">
+    <main dir={dir} className="habat-attendance-shell min-h-screen bg-[#f5f5f3] text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-4">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild><Button type="button" variant="outline" size="icon" className="rounded-xl lg:hidden"><Menu className="h-5 w-5" /></Button></SheetTrigger>
-              <SheetContent side="right" dir="rtl" className="w-[86vw] max-w-[330px] p-0">
-                <SheetHeader className="border-b border-slate-100 p-5"><SheetTitle className="text-right"><Brand compact /></SheetTitle></SheetHeader>
+              <SheetContent side={language === "ar" ? "right" : "left"} dir={dir} className="w-[86vw] max-w-[330px] p-0">
+                <SheetHeader className="border-b border-slate-100 p-5"><SheetTitle className={language === "ar" ? "text-right" : "text-left"}><Brand compact /></SheetTitle></SheetHeader>
                 <div className="flex-1 overflow-y-auto p-3"><SidebarNav items={items} page={page} onChange={navigate} /></div>
-                <div className="border-t border-slate-100 p-4"><Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => signOut(auth)}>تسجيل الخروج</Button></div>
+                <div className="border-t border-slate-100 p-4"><Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => signOut(auth)}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></div>
               </SheetContent>
             </Sheet>
             <Brand compact />
           </div>
-          <div className="flex items-center gap-2"><div className="hidden text-left sm:block"><p className="text-sm font-black">{context.principal.displayName || context.principal.email}</p><p className="text-xs text-slate-500">{context.principal.canManage ? "إدارة" : "موظف"}</p></div><Button type="button" variant="outline" className="hidden rounded-xl lg:inline-flex" onClick={() => signOut(auth)}>خروج</Button></div>
+          <div className="flex items-center gap-2">
+            <div className="hidden min-w-0 sm:block">
+              <p dir="auto" className="max-w-[180px] truncate text-end text-sm font-black">
+                {context.principal.displayName || context.principal.email}
+              </p>
+              <p className="text-end text-xs text-slate-500">
+                {context.principal.canManage
+                  ? tr(language, "إدارة", "Management")
+                  : tr(language, "موظف", "Employee")}
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-12 shrink-0 rounded-xl font-bold"
+              onClick={toggleLanguage}
+              aria-label={tr(language, "تغيير اللغة", "Change language")}
+            >
+              {language === "ar" ? "EN" : "AR"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="hidden shrink-0 rounded-xl lg:inline-flex"
+              onClick={() => signOut(auth)}
+            >
+              {tr(language, "خروج", "Sign out")}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -1076,10 +1227,26 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
 
 async function loadContext(): Promise<AccessState> {
   try { return { status: "ready", context: await habatApi<HabatContext>("v2/context") }; }
-  catch (error) { return { status: "forbidden", message: extendedError(error) }; }
+  catch (error) { return { status: "forbidden", message: extendedError(error, language) }; }
+}
+
+function LoadingHabatScreen() {
+  const { language } = useLanguage();
+  return (
+    <main
+      dir={languageDir(language)}
+      className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4 font-bold text-slate-600"
+    >
+      <div className="text-center">
+        <RefreshCw className="mx-auto mb-3 animate-spin" />
+        {tr(language, "جاري تحميل نظام الحضور...", "Loading attendance system...")}
+      </div>
+    </main>
+  );
 }
 
 export default function HabatAttendanceAppV4() {
+  const { language } = useLanguage();
   useWesternDigitsBoundary();
   const [access, setAccess] = useState<AccessState>({ status: "loading" });
 
@@ -1091,8 +1258,8 @@ export default function HabatAttendanceAppV4() {
 
   const refreshContext = useCallback(async () => { setAccess(await loadContext()); }, []);
 
-  if (access.status === "loading") return <main dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4 font-bold text-slate-600"><div className="text-center"><RefreshCw className="mx-auto mb-3 animate-spin" />جاري تحميل نظام الحضور...</div></main>;
+  if (access.status === "loading") return <LoadingHabatScreen />;
   if (access.status === "signed-out") return <LoginScreen />;
-  if (access.status === "forbidden") return <main dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4"><section className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-7 text-center shadow-sm"><ShieldCheck className="mx-auto mb-4 text-slate-400" size={34} /><h2 className="text-xl font-black">غير مصرح بالدخول</h2><p className="mt-2 text-sm text-slate-500">{access.message}</p><Button type="button" className="mt-5 rounded-xl bg-black" onClick={() => signOut(auth)}>تسجيل الخروج</Button></section></main>;
+  if (access.status === "forbidden") return <main dir={languageDir(language)} className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4"><section className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-7 text-center shadow-sm"><ShieldCheck className="mx-auto mb-4 text-slate-400" size={34} /><h2 className="text-xl font-black">{tr(language, "غير مصرح بالدخول", "Access denied")}</h2><p className="mt-2 text-sm text-slate-500">{access.message}</p><Button type="button" className="mt-5 rounded-xl bg-black" onClick={() => signOut(auth)}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></section></main>;
   return <AttendanceShell context={access.context} onContextRefresh={refreshContext} />;
 }

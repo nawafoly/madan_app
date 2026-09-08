@@ -1,3 +1,5 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   KeyRound,
   Link2,
@@ -94,6 +96,7 @@ function firebaseAccountError(error: unknown) {
 }
 
 export default function HabatAccountManagement({ onDataChanged }: Props) {
+  const { language } = useLanguage();
   const [accounts, setAccounts] = useState<HabatAccessAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -308,7 +311,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={languageDir(language)}>
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -317,7 +320,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                 <UsersRound size={22} />
               </div>
               <div>
-                <h2 className="text-lg font-black">إدارة الحسابات</h2>
+                <h2 className="text-lg font-black">{tr(language, "إدارة الحسابات", "Account Management")}</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   إنشاء حسابات الدخول وربطها بصلاحيات حبات الورق
                 </p>
@@ -328,7 +331,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
             onClick={() => void refresh()}
             className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold hover:bg-slate-50"
           >
-            <RefreshCw size={16} /> تحديث
+            <RefreshCw size={16} /> {tr(language, "تحديث", "Refresh")}
           </button>
         </div>
 
@@ -342,7 +345,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                 : "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-slate-500"
             }
           >
-            <UserPlus size={17} /> إنشاء حساب جديد
+            <UserPlus size={17} /> {tr(language, "إنشاء حساب جديد", "Create New Account")}
           </button>
           <button
             type="button"
@@ -353,7 +356,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                 : "flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-slate-500"
             }
           >
-            <Link2 size={17} /> ربط حساب موجود
+            <Link2 size={17} /> {tr(language, "ربط حساب موجود", "Link Existing Account")}
           </button>
         </div>
 
@@ -363,7 +366,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
             <input
               value={displayName}
               onChange={event => setDisplayName(event.target.value)}
-              placeholder="اسم صاحب الحساب"
+              placeholder={tr(language, "اسم صاحب الحساب", "Account holder name")}
               className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-slate-900"
               autoComplete="off"
             />
@@ -429,8 +432,8 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
               onChange={event => changeRole(event.target.value as AccessLevel)}
               className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3"
             >
-              <option value="manager">إدارة — يدخل الداشبورد</option>
-              <option value="employee">موظف — حضور وانصراف</option>
+              <option value="manager">{tr(language, "إدارة — يدخل الداشبورد", "Management — Dashboard Access")}</option>
+              <option value="employee">{tr(language, "موظف — حضور وانصراف", "Employee — Attendance")}</option>
             </select>
           </label>
 
@@ -478,7 +481,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
         <div className="mb-5 flex items-center gap-3">
           <ShieldCheck size={21} />
           <div>
-            <h3 className="font-black">الحسابات المصرح لها</h3>
+            <h3 className="font-black">{tr(language, "الحسابات المصرح لها", "Authorized Accounts")}</h3>
             <p className="text-sm text-slate-500">
               الإيقاف هنا يمنع دخول حبات الورق ولا يحذف حساب Firebase.
             </p>
@@ -487,7 +490,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
 
         {loading ? (
           <p className="py-10 text-center text-sm text-slate-500">
-            جاري تحميل الحسابات...
+            {tr(language, "جاري تحميل الحسابات...", "Loading accounts...")}
           </p>
         ) : accounts.length ? (
           <div className="space-y-3">
@@ -513,7 +516,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                             : "rounded-full bg-slate-100 px-2 py-1 text-slate-500"
                         }
                       >
-                        {account.isActive ? "فعال" : "موقوف"}
+                        {account.isActive ? tr(language, "فعال", "Active") : tr(language, "موقوف", "Disabled")}
                       </span>
                     </p>
                   </div>
@@ -531,8 +534,8 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                     }
                     className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold"
                   >
-                    <option value="manager">إدارة</option>
-                    <option value="employee">موظف</option>
+                    <option value="manager">{tr(language, "إدارة", "Management")}</option>
+                    <option value="employee">{tr(language, "موظف", "Employee")}</option>
                   </select>
 
                   <label className="flex h-10 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold">
@@ -556,7 +559,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                       onClick={() => void sendReset(account)}
                       className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black hover:bg-slate-50 disabled:opacity-50"
                     >
-                      <KeyRound size={14} /> إعادة كلمة المرور
+                      <KeyRound size={14} /> {tr(language, "إعادة كلمة المرور", "Reset Password")}
                     </button>
                     <button
                       type="button"
@@ -570,7 +573,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                           : "rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-50"
                       }
                     >
-                      {account.isActive ? "إيقاف الدخول" : "تفعيل الدخول"}
+                      {account.isActive ? tr(language, "إيقاف الدخول", "Disable Access") : tr(language, "تفعيل الدخول", "Enable Access")}
                     </button>
                   </div>
                 </div>
@@ -579,7 +582,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
           </div>
         ) : (
           <p className="py-10 text-center text-sm text-slate-500">
-            لا توجد حسابات مضافة حتى الآن.
+            {tr(language, "لا توجد حسابات مضافة حتى الآن.", "No accounts have been added yet.")}
           </p>
         )}
       </section>

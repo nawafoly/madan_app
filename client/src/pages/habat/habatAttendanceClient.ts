@@ -263,7 +263,7 @@ export function formatTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString("ar-SA", {
+  return date.toLocaleTimeString("ar-SA-u-nu-latn", {
     timeZone: "Asia/Riyadh",
     hour: "2-digit",
     minute: "2-digit",
@@ -274,7 +274,7 @@ export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(`${value}T12:00:00+03:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("ar-SA", {
+  return date.toLocaleDateString("ar-SA-u-nu-latn", {
     timeZone: "Asia/Riyadh",
     year: "numeric",
     month: "short",

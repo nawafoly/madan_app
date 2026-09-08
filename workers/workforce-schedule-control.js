@@ -109,7 +109,35 @@ export async function resolveWorkforceScheduleDay(db, tenantId, employeeId, date
       .first();
   }
 
-  return classifyWorkforceScheduleDay({ date, assignment, exception, exceptionTemplate });
+  let assignmentDayTemplate = null;
+
+  if (assignment) {
+    const weekPattern = resolveAssignmentWeekPattern(assignment);
+    const weekday = weekdayNumber(date);
+    const dayConfig = weekPattern.days?.[String(weekday)] || null;
+    const dayTemplateId = clean(dayConfig?.templateId || dayConfig?.template_id);
+
+    if (
+      dayConfig?.kind === "work" &&
+      dayTemplateId &&
+      dayTemplateId !== clean(assignment.template_id)
+    ) {
+      assignmentDayTemplate = await db
+        .prepare(`SELECT * FROM workforce_schedule_templates
+                   WHERE tenant_id = ? AND id = ? AND is_active = 1
+                   LIMIT 1`)
+        .bind(tenantId, dayTemplateId)
+        .first();
+    }
+  }
+
+  return classifyWorkforceScheduleDay({
+    date,
+    assignment,
+    exception,
+    exceptionTemplate,
+    assignmentDayTemplate,
+  });
 }
 
 export async function resolveWorkforceScheduleRange(db, tenantId, employeeId, fromValue, toValue) {
@@ -156,19 +184,82 @@ export async function resolveWorkforceScheduleRange(db, tenantId, employeeId, fr
     if (!exceptionByDate.has(row.work_date)) exceptionByDate.set(row.work_date, row);
   }
   const assignments = assignmentResult?.results || [];
+
+  const referencedTemplateIds = new Set();
+  for (const assignment of assignments) {
+    const weekPattern = resolveAssignmentWeekPattern(assignment);
+    if (!weekPattern.days) continue;
+
+    for (let day = 0; day <= 6; day += 1) {
+      const config = weekPattern.days[String(day)];
+      if (config?.kind !== "work") continue;
+
+      const templateId = clean(config.templateId || config.template_id);
+      if (templateId && templateId !== clean(assignment.template_id)) {
+        referencedTemplateIds.add(templateId);
+      }
+    }
+  }
+
+  const assignmentTemplateById = new Map();
+
+  if (referencedTemplateIds.size) {
+    const ids = [...referencedTemplateIds];
+    const placeholders = ids.map(() => "?").join(",");
+    const result = await db.prepare(
+      `SELECT * FROM workforce_schedule_templates
+        WHERE tenant_id = ? AND is_active = 1
+          AND id IN (${placeholders})`
+    ).bind(tenantId, ...ids).all();
+
+    for (const row of result?.results || []) {
+      assignmentTemplateById.set(clean(row.id), row);
+    }
+  }
+
   const schedules = [];
   let cursor = from;
   while (cursor <= to) {
-    const assignment = assignments.find(row => row.effective_from <= cursor && (!row.effective_to || row.effective_to >= cursor)) || null;
+    const assignment = assignments.find(
+      row => row.effective_from <= cursor && (!row.effective_to || row.effective_to >= cursor)
+    ) || null;
+
     const exception = exceptionByDate.get(cursor) || null;
-    const exceptionTemplate = exception ? exceptionTemplateFromJoinedRow(exception) : null;
-    schedules.push(classifyWorkforceScheduleDay({ date: cursor, assignment, exception, exceptionTemplate }));
+    const exceptionTemplate = exception
+      ? exceptionTemplateFromJoinedRow(exception)
+      : null;
+
+    let assignmentDayTemplate = null;
+
+    if (assignment) {
+      const weekPattern = resolveAssignmentWeekPattern(assignment);
+      const weekday = weekdayNumber(cursor);
+      const config = weekPattern.days?.[String(weekday)] || null;
+      const templateId = clean(config?.templateId || config?.template_id);
+
+      if (
+        config?.kind === "work" &&
+        templateId &&
+        templateId !== clean(assignment.template_id)
+      ) {
+        assignmentDayTemplate = assignmentTemplateById.get(templateId) || null;
+      }
+    }
+
+    schedules.push(classifyWorkforceScheduleDay({
+      date: cursor,
+      assignment,
+      exception,
+      exceptionTemplate,
+      assignmentDayTemplate,
+    }));
+
     cursor = addDays(cursor, 1);
   }
   return schedules;
 }
 
-export function classifyWorkforceScheduleDay({ date, assignment, exception, exceptionTemplate }) {
+export function classifyWorkforceScheduleDay({ date, assignment, exception, exceptionTemplate, assignmentDayTemplate = null }) {
   const weekday = weekdayNumber(date);
   const base = mapAssignmentTemplate(assignment);
   const exceptionType = clean(exception?.exception_type);
@@ -259,18 +350,23 @@ export function classifyWorkforceScheduleDay({ date, assignment, exception, exce
 
   const weekPattern = resolveAssignmentWeekPattern(assignment);
   const isWorkingDay = weekPattern.workingDays.includes(weekday);
+
+  const effectiveBase = isWorkingDay
+    ? (mapTemplate(assignmentDayTemplate) || base || emptyShift())
+    : emptyShift();
+
   return {
     date,
     kind: isWorkingDay ? "assignment" : "weekly_rest",
     source: "schedule_assignment",
     scheduleOwnership: weekPattern.source,
-    ready: true,
+    ready: !isWorkingDay || Boolean(effectiveBase.startTime && effectiveBase.endTime),
     isWorkingDay,
     isWeeklyRest: !isWorkingDay,
     weeklyRestWeekday: weekPattern.weeklyRestWeekday,
     assignmentId: nullable(assignment.id),
     exceptionId: null,
-    ...(base || emptyShift()),
+    ...effectiveBase,
   };
 }
 
@@ -562,34 +658,73 @@ function emptyShift() {
 }
 
 function resolveAssignmentWeekPattern(row) {
+  try {
+    const parsed = JSON.parse(row?.week_pattern_json || "{}");
+
+    if (parsed?.version === 2 && parsed?.days && typeof parsed.days === "object") {
+      const workingDays = [];
+      const restDays = [];
+
+      for (let day = 0; day <= 6; day += 1) {
+        const item = parsed.days[String(day)];
+        if (item?.kind === "work" && clean(item.templateId || item.template_id)) {
+          workingDays.push(day);
+        } else {
+          restDays.push(day);
+        }
+      }
+
+      return {
+        workingDays,
+        restDays,
+        weeklyRestWeekday: restDays.length === 1 ? restDays[0] : null,
+        days: parsed.days,
+        source: "employee_schedule_v2",
+      };
+    }
+  } catch {}
+
   const explicitRest = Number(row?.weekly_rest_weekday);
   if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
     let workingDays = [];
+
     try {
       const parsed = JSON.parse(row?.week_pattern_json || "{}");
       workingDays = Array.isArray(parsed?.workingDays)
-        ? Array.from(new Set(parsed.workingDays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)))
+        ? Array.from(new Set(
+            parsed.workingDays
+              .map(Number)
+              .filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+          ))
         : [];
     } catch {}
+
     if (!workingDays.length) {
       workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== explicitRest);
     }
-    workingDays = workingDays.filter(day => day !== explicitRest).sort((a, b) => a - b);
+
+    workingDays = workingDays
+      .filter(day => day !== explicitRest)
+      .sort((a, b) => a - b);
+
     return {
       workingDays,
+      restDays: [explicitRest],
       weeklyRestWeekday: explicitRest,
+      days: null,
       source: "employee_schedule",
     };
   }
 
-  // Existing assignments created before 0005 remain readable without a
-  // destructive backfill. Once HR saves the employee schedule, ownership moves
-  // to the assignment and this fallback is no longer used.
   const workingDays = parseWorkingDays(row?.working_days_json);
-  const restDays = [0, 1, 2, 3, 4, 5, 6].filter(day => !workingDays.includes(day));
+  const restDays = [0, 1, 2, 3, 4, 5, 6]
+    .filter(day => !workingDays.includes(day));
+
   return {
     workingDays,
+    restDays,
     weeklyRestWeekday: restDays.length === 1 ? restDays[0] : null,
+    days: null,
     source: "legacy_template_fallback",
   };
 }

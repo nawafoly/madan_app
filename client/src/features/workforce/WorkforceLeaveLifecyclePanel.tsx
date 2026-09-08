@@ -1,3 +1,5 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarCheck2, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
 
@@ -24,26 +26,26 @@ type Props = {
   onChanged?: () => void | Promise<void>;
 };
 
-const leaveLabels: Record<WorkforceLeave["leave_type"], string> = {
-  annual: "سنوية",
-  sick: "مرضية",
-  emergency: "طارئة",
-  unpaid: "بدون راتب",
-  rest: "راحة معتمدة",
-  weekly_rest_substitute: "بديل راحة أسبوعية",
-  other: "أخرى",
+const leaveLabels: Record<WorkforceLeave["leave_type"], { ar: string; en: string }> = {
+  annual: { ar: "سنوية", en: "Annual" },
+  sick: { ar: "مرضية", en: "Sick" },
+  emergency: { ar: "طارئة", en: "Emergency" },
+  unpaid: { ar: "بدون راتب", en: "Unpaid" },
+  rest: { ar: "راحة معتمدة", en: "Approved Rest" },
+  weekly_rest_substitute: { ar: "بديل راحة أسبوعية", en: "Weekly Rest Substitute" },
+  other: { ar: "أخرى", en: "Other" },
 };
 
-function friendlyError(error: unknown) {
+function friendlyError(error: unknown, language: "ar" | "en") {
   const code = error instanceof WorkforceApiError ? error.code : String((error as { message?: unknown })?.message || "");
   const messages: Record<string, string> = {
-    workforce_leave_not_found: "لم يتم العثور على الإجازة.",
-    workforce_leave_not_cancellable: "حالة الإجازة الحالية لا تسمح بالإلغاء.",
-    workforce_annual_leave_schedule_not_ready: "تعذر احتساب الإجازة السنوية لأن جدول الدوام غير جاهز لكل الأيام.",
-    workforce_annual_leave_insufficient_balance: "رصيد الإجازة السنوية غير كافٍ.",
-    workforce_annual_leave_no_chargeable_workday: "الفترة لا تحتوي يوم عمل قابل للخصم.",
+    workforce_leave_not_found: tr(language, "لم يتم العثور على الإجازة.", "Leave record was not found."),
+    workforce_leave_not_cancellable: tr(language, "حالة الإجازة الحالية لا تسمح بالإلغاء.", "The current leave status cannot be cancelled."),
+    workforce_annual_leave_schedule_not_ready: tr(language, "تعذر احتساب الإجازة السنوية لأن جدول الدوام غير جاهز لكل الأيام.", "Annual leave cannot be calculated because the schedule is not ready for every day."),
+    workforce_annual_leave_insufficient_balance: tr(language, "رصيد الإجازة السنوية غير كافٍ.", "Annual leave balance is insufficient."),
+    workforce_annual_leave_no_chargeable_workday: tr(language, "الفترة لا تحتوي يوم عمل قابل للخصم.", "The period contains no chargeable work day."),
   };
-  return messages[code] || code || "تعذر إكمال العملية.";
+  return messages[code] || code || tr(language, "تعذر إكمال العملية.", "Unable to complete the operation.");
 }
 
 function dateText(value?: string | null) {
@@ -54,6 +56,7 @@ function dateText(value?: string | null) {
 }
 
 export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: Props) {
+  const { language } = useLanguage();
   const [leaves, setLeaves] = useState<LeaveWithUsage[]>([]);
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState("");
@@ -69,7 +72,7 @@ export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: 
       );
       setLeaves(payload.leaves || []);
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(friendlyError(caught, language));
     } finally {
       setLoading(false);
     }
@@ -87,12 +90,12 @@ export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: 
         method: "DELETE",
       });
       setMessage(leave.leave_type === "annual"
-        ? "تم إلغاء الإجازة وإرجاع الخصم السنوي المرتبط بها إن وجد."
-        : "تم إلغاء الإجازة.");
+        ? tr(language, "تم إلغاء الإجازة وإرجاع الخصم السنوي المرتبط بها إن وجد.", "Leave cancelled and its annual balance deduction was reversed when applicable.")
+        : tr(language, "تم إلغاء الإجازة.", "Leave cancelled."));
       await load();
       await onChanged?.();
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(friendlyError(caught, language));
     } finally {
       setWorkingId("");
     }
@@ -106,20 +109,20 @@ export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: 
             <CalendarCheck2 className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="font-black">دورة الإجازة والخصم من الرصيد</h3>
+            <h3 className="font-black">{tr(language, "دورة الإجازة والخصم من الرصيد", "Leave Lifecycle & Balance Deduction")}</h3>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              الإجازة السنوية المعتمدة تخصم فقط أيام العمل التي يحسمها Schedule Resolver. أيام الراحة الأسبوعية والإيقاف الاستثنائي لا تخصم من الرصيد، وإلغاء الإجازة ينشئ حركة عكسية قابلة للتدقيق بدل حذف الحركة القديمة.
+              {tr(language, "الإجازة السنوية المعتمدة تخصم فقط أيام العمل التي يحسمها Schedule Resolver. أيام الراحة الأسبوعية والإيقاف الاستثنائي لا تخصم من الرصيد، وإلغاء الإجازة ينشئ حركة عكسية قابلة للتدقيق بدل حذف الحركة القديمة.", "Approved annual leave deducts only the work days determined by the Schedule Resolver. Weekly rest and exceptional off days do not reduce the balance, and cancelling leave creates an auditable reversal instead of deleting the original transaction.")}
             </p>
           </div>
         </div>
         <Button type="button" variant="outline" className="rounded-xl" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className="h-4 w-4" /> تحديث
+          <RefreshCw className="h-4 w-4" /> {tr(language, "تحديث", "Refresh")}
         </Button>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
-        <Badge variant="outline" className="rounded-full"><ShieldCheck className="ml-1 h-3.5 w-3.5" /> LEAVE_USED غير قابل للحذف</Badge>
-        <Badge variant="outline" className="rounded-full"><RotateCcw className="ml-1 h-3.5 w-3.5" /> الإلغاء = LEAVE_REVERSAL</Badge>
+        <Badge variant="outline" className="rounded-full"><ShieldCheck className="ml-1 h-3.5 w-3.5" /> {tr(language, "LEAVE_USED غير قابل للحذف", "LEAVE_USED cannot be deleted")}</Badge>
+        <Badge variant="outline" className="rounded-full"><RotateCcw className="ml-1 h-3.5 w-3.5" /> {tr(language, "الإلغاء = LEAVE_REVERSAL", "Cancellation = LEAVE_REVERSAL")}</Badge>
       </div>
 
       {error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
@@ -129,12 +132,12 @@ export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: 
         <Table className="min-w-[780px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="text-right">النوع</TableHead>
-              <TableHead className="text-right">الفترة</TableHead>
-              <TableHead className="text-right">الحالة</TableHead>
-              <TableHead className="text-right">خصم الرصيد</TableHead>
-              <TableHead className="text-right">العكس</TableHead>
-              <TableHead className="text-right">الإجراء</TableHead>
+              <TableHead className="text-start">{tr(language, "النوع", "Type")}</TableHead>
+              <TableHead className="text-start">{tr(language, "الفترة", "Period")}</TableHead>
+              <TableHead className="text-start">{tr(language, "الحالة", "Status")}</TableHead>
+              <TableHead className="text-start">{tr(language, "خصم الرصيد", "Balance Deduction")}</TableHead>
+              <TableHead className="text-start">{tr(language, "العكس", "Reversal")}</TableHead>
+              <TableHead className="text-start">{tr(language, "الإجراء", "Action")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -143,24 +146,24 @@ export default function WorkforceLeaveLifecyclePanel({ employeeId, onChanged }: 
               const reversed = Number(leave.annual_reversal_days || 0);
               return (
                 <TableRow key={leave.id}>
-                  <TableCell className="font-bold">{leaveLabels[leave.leave_type]}</TableCell>
+                  <TableCell className="font-bold">{language === "ar" ? leaveLabels[leave.leave_type].ar : leaveLabels[leave.leave_type].en}</TableCell>
                   <TableCell>{dateText(leave.start_date)}{leave.end_date !== leave.start_date ? ` — ${dateText(leave.end_date)}` : ""}</TableCell>
-                  <TableCell><Badge variant="outline" className="rounded-full">{leave.status === "approved" ? "معتمدة" : leave.status === "cancelled" ? "ملغاة" : leave.status}</Badge></TableCell>
-                  <TableCell>{leave.leave_type === "annual" ? `${used.toLocaleString("en-US", { maximumFractionDigits: 4 })} يوم` : "—"}</TableCell>
-                  <TableCell>{leave.leave_type === "annual" && reversed > 0 ? `${reversed.toLocaleString("en-US", { maximumFractionDigits: 4 })} يوم` : "—"}</TableCell>
+                  <TableCell><Badge variant="outline" className="rounded-full">{leave.status === "approved" ? tr(language, "معتمدة", "Approved") : leave.status === "cancelled" ? tr(language, "ملغاة", "Cancelled") : leave.status}</Badge></TableCell>
+                  <TableCell>{leave.leave_type === "annual" ? `${used.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${tr(language, "يوم", "day")}` : "—"}</TableCell>
+                  <TableCell>{leave.leave_type === "annual" && reversed > 0 ? `${reversed.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${tr(language, "يوم", "day")}` : "—"}</TableCell>
                   <TableCell>
                     {leave.status === "approved" ? (
                       <Button type="button" variant="outline" className="rounded-xl" disabled={Boolean(workingId)} onClick={() => void cancelLeave(leave)}>
-                        <RotateCcw className="h-4 w-4" /> {workingId === leave.id ? "جارٍ الإلغاء..." : "إلغاء"}
+                        <RotateCcw className="h-4 w-4" /> {workingId === leave.id ? tr(language, "جارٍ الإلغاء...", "Cancelling...") : tr(language, "إلغاء", "Cancel")}
                       </Button>
-                    ) : <span className="text-xs text-slate-400">لا يوجد إجراء</span>}
+                    ) : <span className="text-xs text-slate-400">{tr(language, "لا يوجد إجراء", "No Action")}</span>}
                   </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
-        {!loading && !leaves.length ? <p className="py-8 text-center text-sm text-slate-500">لا توجد إجازات مسجلة.</p> : null}
+        {!loading && !leaves.length ? <p className="py-8 text-center text-sm text-slate-500">{tr(language, "لا توجد إجازات مسجلة.", "No leave records.")}</p> : null}
       </div>
     </section>
   );

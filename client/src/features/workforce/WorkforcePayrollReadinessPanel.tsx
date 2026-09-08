@@ -1,3 +1,5 @@
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import { AlertTriangle, Calculator, CheckCircle2, Clock3, Loader2, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -8,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { WorkforceApiError, halalasToRiyals, workforceApi } from "./workforceClient";
 
+import HabatDatePicker from "@/pages/habat/HabatDatePicker";
 type Blocker = { stage: string; code: string; message: string };
 type Preview = {
   policyVersion: string;
@@ -84,6 +87,7 @@ type Preview = {
 type Props = { employeeId: string };
 
 export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
+  const { language } = useLanguage();
   const [month, setMonth] = useState(currentMonth());
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,7 +105,7 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
       );
       setPreview(result.preview);
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(friendlyError(caught, language));
     } finally {
       setLoading(false);
     }
@@ -120,9 +124,9 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
         { method: "POST" }
       );
       setPreview(result.preview);
-      setMessage("تم تطبيق احتساب الحضور والغياب على مسودة المسير وتحديث صافي الراتب.");
+      setMessage(tr(language, "تم تطبيق احتساب الحضور والغياب على مسودة المسير وتحديث صافي الراتب.", "Attendance and absence calculations were applied to the payroll draft and net salary was updated."));
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(friendlyError(caught, language));
     } finally {
       setApplying(false);
     }
@@ -135,24 +139,24 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
   );
 
   return (
-    <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6" dir="rtl">
+    <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6" dir={languageDir(language)}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white"><ShieldCheck className="h-5 w-5" /></span>
             <div>
-              <h3 className="font-black">جاهزية المسير وخصم الحضور</h3>
-              <p className="mt-1 text-sm text-slate-500">فحص موحد للربط، الدوام، البصمات الناقصة، الغياب، ثم احتساب الخصم على مسودة الراتب فقط.</p>
+              <h3 className="font-black">{tr(language, "جاهزية المسير وخصم الحضور", "Payroll Readiness & Attendance Deduction")}</h3>
+              <p className="mt-1 text-sm text-slate-500">{tr(language, "فحص موحد للربط، الدوام، البصمات الناقصة، الغياب، ثم احتساب الخصم على مسودة الراتب فقط.", "Unified check of attendance linking, schedule, missing punches, absence, and payroll-draft deductions.")}</p>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="space-y-1 text-xs font-bold text-slate-600">
-            <span>الشهر</span>
-            <Input dir="ltr" type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-10 w-40 rounded-xl" />
+            <span>{tr(language, "الشهر", "Month")}</span>
+            <HabatDatePicker mode="month" value={month} onChange={setMonth} className="w-40" />
           </label>
           <Button type="button" variant="outline" className="rounded-xl" onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} تحديث
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {tr(language, "تحديث", "Refresh")}
           </Button>
         </div>
       </div>
@@ -160,24 +164,24 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
 
-      {loading && !preview ? <div className="py-10 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />جاري فحص الجاهزية...</div> : null}
+      {loading && !preview ? <div className="py-10 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />{tr(language, "جاري فحص الجاهزية...", "Checking readiness...")}</div> : null}
 
       {preview ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}>
               {status === "ready" ? <CheckCircle2 className="ml-1 h-3.5 w-3.5" /> : <AlertTriangle className="ml-1 h-3.5 w-3.5" />}
-              {status === "ready" ? "جاهز للاحتساب" : "غير جاهز"}
+              {status === "ready" ? tr(language, "جاهز للاحتساب", "Ready to Calculate") : tr(language, "غير جاهز", "Not Ready")}
             </Badge>
-            <Badge variant="outline">ربط الحضور: {linkLabel(preview.attendance.linkStatus)}</Badge>
-            <Badge variant="outline">الدوام: {preview.attendance.scheduleReady ? "جاهز" : "يحتاج مراجعة"}</Badge>
-            <Badge variant="outline">حتى: {preview.completedThrough || "لم تبدأ الفترة"}</Badge>
-            {preview.locked ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">المسير مقفل للتعديل</Badge> : null}
+            <Badge variant="outline">{tr(language, "ربط الحضور:", "Attendance Link:")} {linkLabel(preview.attendance.linkStatus, language)}</Badge>
+            <Badge variant="outline">الدوام: {preview.attendance.scheduleReady ? tr(language, "جاهز", "Ready") : tr(language, "يحتاج مراجعة", "Needs Review")}</Badge>
+            <Badge variant="outline">حتى: {preview.completedThrough || tr(language, "لم تبدأ الفترة", "Period Not Started")}</Badge>
+            {preview.locked ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{tr(language, "المسير مقفل للتعديل", "Payroll Locked")}</Badge> : null}
           </div>
 
           {!preview.readiness.ready ? (
             <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p className="font-black text-amber-900">لم يتم تطبيق خصم الحضور لأن الجاهزية غير مكتملة.</p>
+              <p className="font-black text-amber-900">{tr(language, "لم يتم تطبيق خصم الحضور لأن الجاهزية غير مكتملة.", "Attendance deduction was not applied because readiness is incomplete.")}</p>
               {preview.readiness.blockers.map(blocker => (
                 <div key={`${blocker.stage}:${blocker.code}`} className="flex items-start gap-2 text-sm text-amber-900">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -188,38 +192,38 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
           ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label="أجر اليوم" value={money(preview.rates.dailyRateHalalas)} icon={<WalletCards className="h-4 w-4" />} />
-            <Metric label="أجر الساعة" value={money(preview.rates.hourlyRateHalalas)} icon={<Clock3 className="h-4 w-4" />} />
-            <Metric label="خصم حضور محسوب" value={money(preview.deductions.attendanceDeductionHalalas)} icon={<Calculator className="h-4 w-4" />} />
-            <Metric label="خصم غياب محسوب" value={money(preview.deductions.absenceDeductionHalalas)} icon={<Calculator className="h-4 w-4" />} />
+            <Metric label={tr(language, "أجر اليوم", "Daily Rate")} value={money(preview.rates.dailyRateHalalas, language)} icon={<WalletCards className="h-4 w-4" />} />
+            <Metric label={tr(language, "أجر الساعة", "Hourly Rate")} value={money(preview.rates.hourlyRateHalalas, language)} icon={<Clock3 className="h-4 w-4" />} />
+            <Metric label={tr(language, "خصم حضور محسوب", "Calculated Attendance Deduction")} value={money(preview.deductions.attendanceDeductionHalalas, language)} icon={<Calculator className="h-4 w-4" />} />
+            <Metric label={tr(language, "خصم غياب محسوب", "Calculated Absence Deduction")} value={money(preview.deductions.absenceDeductionHalalas, language)} icon={<Calculator className="h-4 w-4" />} />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SmallMetric label="دقائق النقص" value={String(preview.attendance.attendanceMissingMinutes)} />
-            <SmallMetric label="دقائق التأخير" value={String(preview.attendance.lateMinutes)} />
-            <SmallMetric label="دقائق الخروج المبكر" value={String(preview.attendance.earlyLeaveMinutes)} />
-            <SmallMetric label="أيام البصمة الناقصة" value={String(preview.attendance.incompletePunchDays)} />
+            <SmallMetric label={tr(language, "دقائق النقص", "Missing Minutes")} value={String(preview.attendance.attendanceMissingMinutes)} />
+            <SmallMetric label={tr(language, "دقائق التأخير", "Late Minutes")} value={String(preview.attendance.lateMinutes)} />
+            <SmallMetric label={tr(language, "دقائق الخروج المبكر", "Early Leave Minutes")} value={String(preview.attendance.earlyLeaveMinutes)} />
+            <SmallMetric label={tr(language, "أيام البصمة الناقصة", "Missing Punch Days")} value={String(preview.attendance.incompletePunchDays)} />
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-100">
             <Table className="min-w-[760px]">
               <TableHeader><TableRow>
-                <TableHead className="text-right">التاريخ</TableHead>
-                <TableHead className="text-right">الدوام</TableHead>
-                <TableHead className="text-right">المطلوب</TableHead>
-                <TableHead className="text-right">النقص</TableHead>
-                <TableHead className="text-right">الغياب</TableHead>
-                <TableHead className="text-right">الحالة</TableHead>
+                <TableHead className="text-start">{tr(language, "التاريخ", "Date")}</TableHead>
+                <TableHead className="text-start">{tr(language, "الدوام", "Schedule")}</TableHead>
+                <TableHead className="text-start">{tr(language, "المطلوب", "Required")}</TableHead>
+                <TableHead className="text-start">{tr(language, "النقص", "Shortfall")}</TableHead>
+                <TableHead className="text-start">{tr(language, "الغياب", "Absence")}</TableHead>
+                <TableHead className="text-start">{tr(language, "الحالة", "Status")}</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {preview.days.filter(day => day.isWorkingDay || day.attendanceMissingMinutes > 0 || day.absenceUnits > 0 || day.missingPunch).map(day => (
                   <TableRow key={day.date}>
-                    <TableCell dir="ltr" className="text-right">{day.date}</TableCell>
-                    <TableCell>{scheduleLabel(day.scheduleKind)}</TableCell>
-                    <TableCell>{minutesText(day.expectedAttendanceMinutes)}</TableCell>
-                    <TableCell>{minutesText(day.attendanceMissingMinutes)}</TableCell>
-                    <TableCell>{day.absenceUnits ? `${day.absenceUnits} يوم` : "—"}</TableCell>
-                    <TableCell>{day.missingPunch ? <span className="font-bold text-red-600">بصمة ناقصة</span> : "مراجع"}</TableCell>
+                    <TableCell dir="ltr" className="text-start">{day.date}</TableCell>
+                    <TableCell>{scheduleLabel(day.scheduleKind, language)}</TableCell>
+                    <TableCell>{minutesText(day.expectedAttendanceMinutes, language)}</TableCell>
+                    <TableCell>{minutesText(day.attendanceMissingMinutes, language)}</TableCell>
+                    <TableCell>{day.absenceUnits ? `${day.absenceUnits} ${tr(language, "يوم", "day")}` : "—"}</TableCell>
+                    <TableCell>{day.missingPunch ? <span className="font-bold text-red-600">{tr(language, "بصمة ناقصة", "Missing Punch")}</span> : "مراجع"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -228,13 +232,13 @@ export default function WorkforcePayrollReadinessPanel({ employeeId }: Props) {
 
           <div className="flex flex-col gap-3 rounded-2xl bg-slate-950 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs text-slate-300">إجمالي الخصم التلقائي المقترح</p>
-              <p className="mt-1 text-2xl font-black">{money(totalAutoDeduction)}</p>
-              <p className="mt-1 text-xs text-slate-400">لا يتم تعديل مسودة المسير إلا عند الضغط على زر التطبيق وبعد نجاح جميع بوابات الجاهزية.</p>
+              <p className="text-xs text-slate-300">{tr(language, "إجمالي الخصم التلقائي المقترح", "Proposed Automatic Deduction")}</p>
+              <p className="mt-1 text-2xl font-black">{money(totalAutoDeduction, language)}</p>
+              <p className="mt-1 text-xs text-slate-400">{tr(language, "لا يتم تعديل مسودة المسير إلا عند الضغط على زر التطبيق وبعد نجاح جميع بوابات الجاهزية.", "The payroll draft is changed only after Apply is pressed and all readiness gates pass.")}</p>
             </div>
             <Button type="button" className="rounded-xl bg-white text-black hover:bg-slate-100" disabled={!preview.readiness.ready || preview.locked || applying} onClick={() => void apply()}>
               {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
-              تطبيق الاحتساب على مسودة المسير
+              {tr(language, "تطبيق الاحتساب على مسودة المسير", "Apply Calculation to Payroll Draft")}
             </Button>
           </div>
         </>
@@ -249,31 +253,31 @@ function Metric({ label, value, icon }: { label: string; value: string; icon: Re
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return <div className="rounded-2xl border border-slate-100 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 font-black">{value}</p></div>;
 }
-function money(halalas: number) {
-  return `${halalasToRiyals(halalas).toLocaleString("en-US", { maximumFractionDigits: 2 })} ر.س`;
+function money(halalas: number, language: "ar" | "en") {
+  return `${halalasToRiyals(halalas).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${tr(language, "ر.س", "SAR")}`;
 }
-function minutesText(minutes: number) {
+function minutesText(minutes: number, language: "ar" | "en") {
   const value = Number(minutes || 0);
   if (!value) return "—";
   const hours = Math.floor(value / 60);
   const mins = value % 60;
-  return hours ? `${hours}س ${mins ? `${mins}د` : ""}`.trim() : `${mins}د`;
+  return hours ? (language === "ar" ? `${hours}س ${mins ? `${mins}د` : ""}`.trim() : `${hours}h ${mins ? `${mins}m` : ""}`.trim()) : (language === "ar" ? `${mins}د` : `${mins}m`);
 }
-function linkLabel(status: string) {
-  if (status === "confirmed") return "مؤكد";
-  if (status === "exempt") return "مستثنى";
-  if (status === "not_ready") return "غير جاهز";
-  return "غير مربوط";
+function linkLabel(status: string, language: "ar" | "en") {
+  if (status === "confirmed") return tr(language, "مؤكد", "Confirmed");
+  if (status === "exempt") return tr(language, "مستثنى", "Exempt");
+  if (status === "not_ready") return tr(language, "غير جاهز", "Not Ready");
+  return tr(language, "غير مربوط", "Unlinked");
 }
-function scheduleLabel(kind: string) {
+function scheduleLabel(kind: string, language: "ar" | "en") {
   const labels: Record<string, string> = {
-    assignment: "دوام أساسي",
-    weekly_rest: "راحة أسبوعية",
-    exception_off: "راحة استثنائية",
-    custom_shift: "دوام مخصص",
-    alternate_shift: "شفت بديل",
-    weekly_rest_work: "عمل في يوم الراحة",
-    unassigned: "غير معين",
+    assignment: tr(language, "دوام أساسي", "Base Schedule"),
+    weekly_rest: tr(language, "راحة أسبوعية", "Weekly Rest"),
+    exception_off: tr(language, "راحة استثنائية", "Exceptional Rest"),
+    custom_shift: tr(language, "دوام مخصص", "Custom Shift"),
+    alternate_shift: tr(language, "شفت بديل", "Alternate Shift"),
+    weekly_rest_work: tr(language, "عمل في يوم الراحة", "Rest-Day Work"),
+    unassigned: tr(language, "غير معين", "Unassigned"),
   };
   return labels[kind] || kind || "—";
 }
@@ -281,14 +285,14 @@ function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
-function friendlyError(error: unknown) {
-  if (!(error instanceof WorkforceApiError)) return "تعذر تنفيذ العملية.";
+function friendlyError(error: unknown, language: "ar" | "en") {
+  if (!(error instanceof WorkforceApiError)) return tr(language, "تعذر تنفيذ العملية.", "Unable to complete the operation.");
   const messages: Record<string, string> = {
-    workforce_payroll_attendance_unconfirmed: "الحضور غير مربوط/غير مؤكد، لم يتم تطبيق خصم حضور تلقائي.",
-    workforce_payroll_attendance_incomplete: "توجد بصمة ناقصة وتحتاج مراجعة قبل احتساب الراتب.",
-    workforce_payroll_schedule_not_ready: "الدوام غير مكتمل للفترة المطلوبة.",
-    workforce_payroll_entry_locked: "المسير لم يعد مسودة ولا يمكن إعادة احتسابه.",
-    workforce_payroll_settings_required: "أكمل إعدادات الراتب أولًا.",
+    workforce_payroll_attendance_unconfirmed: tr(language, "الحضور غير مربوط/غير مؤكد، لم يتم تطبيق خصم حضور تلقائي.", "Attendance is not linked or confirmed; automatic attendance deduction was not applied."),
+    workforce_payroll_attendance_incomplete: tr(language, "توجد بصمة ناقصة وتحتاج مراجعة قبل احتساب الراتب.", "A missing punch requires review before payroll can be calculated."),
+    workforce_payroll_schedule_not_ready: tr(language, "الدوام غير مكتمل للفترة المطلوبة.", "Schedule is incomplete for the requested period."),
+    workforce_payroll_entry_locked: tr(language, "المسير لم يعد مسودة ولا يمكن إعادة احتسابه.", "Payroll is no longer a draft and cannot be recalculated."),
+    workforce_payroll_settings_required: tr(language, "أكمل إعدادات الراتب أولًا.", "Complete payroll settings first."),
   };
-  return messages[error.code] || error.code || "تعذر تنفيذ العملية.";
+  return messages[error.code] || error.code || tr(language, "تعذر تنفيذ العملية.", "Unable to complete the operation.");
 }

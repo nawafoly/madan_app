@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
 import HabatAttendanceApp from "./pages/habat/HabatAttendanceAppV4";
-import { initializeDocumentLanguage } from "./contexts/LanguageContext";
+import { LanguageProvider, initializeDocumentLanguage } from "./contexts/LanguageContext";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -38,7 +38,11 @@ function HabatAttendanceRuntime() {
     return () => window.clearInterval(timer);
   }, []);
 
-  return <HabatAttendanceApp />;
+  return (
+    <LanguageProvider defaultLanguage="ar">
+      <HabatAttendanceApp />
+    </LanguageProvider>
+  );
 }
 
 const RootApplication = appMode === "habat-attendance" ? HabatAttendanceRuntime : App;

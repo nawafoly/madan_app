@@ -273,10 +273,16 @@ export const WorkforceService = {
   createScheduleAssignment(
     employeeId: string,
     input: {
-      templateId: string;
+      templateId?: string;
       effectiveFrom: string;
       effectiveTo?: string | null;
-      weeklyRestWeekday: number;
+      weekPattern?: {
+        days: Record<
+          string,
+          { kind: "work"; templateId: string } | { kind: "rest" }
+        >;
+      };
+      weeklyRestWeekday?: number;
       reason?: string | null;
       operationId?: string;
     }
