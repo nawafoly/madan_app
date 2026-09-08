@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("readBrowserLocation", () => {
-  it("returns the first fresh high-accuracy GPS reading without starting a watch", async () => {
+  it("returns a high-accuracy GPS reading without starting a watch", async () => {
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
         coords: {
@@ -31,7 +31,7 @@ describe("readBrowserLocation", () => {
     expect(getCurrentPosition).toHaveBeenCalledWith(
       expect.any(Function),
       expect.any(Function),
-      { enableHighAccuracy: true, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
     );
   });
 });

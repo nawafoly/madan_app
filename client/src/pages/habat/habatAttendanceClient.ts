@@ -422,7 +422,8 @@ export async function readBrowserLocation(
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,
+        timeout: 12000,
+        maximumAge: 15000,
       }
     );
   });
