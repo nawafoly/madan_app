@@ -7,6 +7,16 @@ const envFile = path.join(repoRoot, ".env.habat.production.local");
 const buildDir = path.join(repoRoot, "client", "dist");
 const stagingDir = path.join(repoRoot, ".cf-pages");
 const maxAssetBytes = 24 * 1024 * 1024;
+const buildOnly = process.argv.includes("--build-only");
+
+// Never publish a mixed or unreviewed working tree.
+if (!buildOnly) {
+  const status = spawnSync("git", ["status", "--porcelain"], { cwd: repoRoot, encoding: "utf8" });
+  if (status.status !== 0 || status.stdout.trim()) {
+    console.error("[habat-pages] production deployment requires a clean working tree.");
+    process.exit(1);
+  }
+}
 
 function parseEnvFile(filePath) {
   const parsed = {};
@@ -133,27 +143,12 @@ const buildEnv = {
   VITE_APP_MODE: "habat-attendance",
   VITE_USE_HR_D1: "true",
   VITE_HR_CORE_API_URL: "https://maedin-hr-api.maedin2026.workers.dev",
-  // Production calls the Habat Worker directly. The legacy Pages proxy remains
-  // deployed as a rollback path while the direct cutover is stabilized.
-  VITE_HABAT_API_BASE_URL:
-    "https://upload.maedin2026.workers.dev/attendance/habat",
+  // Habat production uses the same-origin Pages proxy.
+  // This keeps authentication cookies first-party at /habat-api/*.
+  VITE_HABAT_API_BASE_URL: "",
 };
 
-const required = [
-  "VITE_FB_API_KEY",
-  "VITE_FB_AUTH_DOMAIN",
-  "VITE_FB_PROJECT_ID",
-  "VITE_FB_APP_ID",
-];
-const missing = required.filter(key => !String(buildEnv[key] ?? "").trim());
-
-if (missing.length) {
-  console.error(
-    `[habat-pages] missing production client variables: ${missing.join(", ")}\n` +
-      `Create ${path.basename(envFile)} first. It is ignored by git.`
-  );
-  process.exit(1);
-}
+buildEnv.VITE_WORKFORCE_API_BASE = "/habat-api/workforce/v1";
 
 console.log("[habat-pages] building Habbat production frontend...");
 run(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["run", "build"], { env: buildEnv });
@@ -163,6 +158,9 @@ if (!fs.existsSync(path.join(buildDir, "index.html"))) {
   process.exit(1);
 }
 
+if (path.dirname(path.resolve(stagingDir)) !== path.resolve(repoRoot) || path.basename(stagingDir) !== ".cf-pages") {
+  throw new Error("Unexpected Pages staging path");
+}
 fs.rmSync(stagingDir, { recursive: true, force: true });
 copyTreeFiltered(buildDir, stagingDir);
 
@@ -173,6 +171,10 @@ fs.writeFileSync(
 );
 
 console.log("[habat-pages] refreshing Cloudflare authentication...");
+if (buildOnly) {
+  console.log("[habat-pages] build and staging complete; no remote actions requested.");
+  process.exit(0);
+}
 const deployEnv = cloudflareDeployEnv();
 
 console.log("[habat-pages] deploying to Cloudflare Pages project habat-alwaraq...");
@@ -187,7 +189,7 @@ run(
     "habat-alwaraq",
     "--branch",
     "habat-production",
-    "--commit-dirty=true",
+    "--commit-dirty=false",
   ],
   { env: deployEnv }
 );

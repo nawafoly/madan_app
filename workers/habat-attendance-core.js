@@ -420,10 +420,10 @@ async function listAccess(db) {
   try {
     const result = await db
       .prepare(
-        `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
-                created_at, updated_at
-         FROM habat_attendance_access
-         ORDER BY is_active DESC, access_level DESC, display_name COLLATE NOCASE ASC, email ASC`
+        `SELECT a.*, c.access_id AS credential_access_id, c.must_change_password
+         FROM habat_attendance_access a
+         LEFT JOIN habat_auth_credentials c ON c.access_id = a.id
+         ORDER BY a.is_active DESC, a.access_level DESC, a.display_name COLLATE NOCASE ASC, a.email ASC`
       )
       .all();
     return json(200, { ok: true, accounts: (result.results || []).map(mapAccessRow) });
@@ -623,6 +623,10 @@ function mapAccessRow(row) {
     accessLevel: normalizeText(row.access_level) || "employee",
     clockEnabled: Number(row.clock_enabled) === 1,
     isActive: Number(row.is_active) === 1,
+    ...(Object.hasOwn(row, "credential_access_id") ? {
+      credentialsProvisioned: Boolean(row.credential_access_id),
+      mustChangePassword: Number(row.must_change_password) === 1,
+    } : {}),
     createdAt: normalizeText(row.created_at) || null,
     updatedAt: normalizeText(row.updated_at) || null,
   };

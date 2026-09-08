@@ -2,7 +2,7 @@
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
 const plugins = [react(), tailwindcss()];
 
@@ -32,8 +32,17 @@ const clientRoot = isInsideClient
 const srcRoot = path.resolve(clientRoot, "src");
 const repoRoot = isInsideClient ? path.resolve(here, "..") : path.resolve(here);
 
-export default defineConfig({
-  plugins,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, repoRoot, "");
+  const isHabat = String(process.env.VITE_APP_MODE ?? env.VITE_APP_MODE ?? "").trim().toLowerCase() === "habat-attendance";
+  return {
+  plugins: [...plugins, ...(isHabat ? [{
+    name: "habat-entry",
+    transformIndexHtml: {
+      order: "pre" as const,
+      handler: (html: string) => html.replace('src="/src/main.tsx"', 'src="/src/habat-main.tsx"'),
+    },
+  }] : [])],
 
   resolve: {
     alias: {
@@ -61,7 +70,7 @@ export default defineConfig({
     host: true,
     proxy: {
       "/habat-api": {
-        target: "https://upload.maedin2026.workers.dev",
+        target: process.env.HABAT_DEV_WORKER_URL || "https://upload.maedin2026.workers.dev",
         changeOrigin: true,
         secure: true,
         rewrite: path =>
@@ -82,4 +91,5 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+};
 });

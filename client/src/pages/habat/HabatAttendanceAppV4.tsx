@@ -30,16 +30,9 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-
 import HabatDatePicker from "./HabatDatePicker";
+import { habatLogin, habatLogout, habatSession, habatChangePassword } from "./habatAuthClient";
 import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
-import { auth } from "@/_core/firebase";
-import { resolveLoginEmailForAuth } from "@/lib/loginIdentity";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
@@ -102,6 +95,7 @@ import {
 type AccessState =
   | { status: "loading" }
   | { status: "signed-out" }
+  | { status: "change-password" }
   | { status: "forbidden"; message: string }
   | { status: "ready"; context: HabatContext };
 
@@ -339,7 +333,11 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function LoginScreen() {
+function LoginScreen({
+  onSignedIn,
+}: {
+  onSignedIn: () => Promise<void>;
+}) {
   const { language } = useLanguage();
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
@@ -352,10 +350,11 @@ function LoginScreen() {
     setBusy(true);
     setError("");
     try {
-      const email = await resolveLoginEmailForAuth(identity);
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch {
-      setError(tr(language, "بيانات الدخول غير صحيحة أو الحساب غير موجود.", "Invalid login details or account not found."));
+      const email = identity.trim().toLowerCase();
+      await habatLogin(email, password);
+      await onSignedIn();
+    } catch (caught) {
+      setError(friendlyHabatError(caught));
       setBusy(false);
     }
   }
@@ -368,8 +367,8 @@ function LoginScreen() {
           <div className="my-7 h-px bg-slate-100" />
           <form className="space-y-4" onSubmit={submit}>
             <div className="space-y-2">
-              <Label>{tr(language, "البريد أو اسم المستخدم", "Email or username")}</Label>
-              <Input value={identity} onChange={event => setIdentity(event.target.value)} autoComplete="username" className="h-12 rounded-2xl bg-slate-50" />
+              <Label>{tr(language, "البريد الإلكتروني", "Email")}</Label>
+              <Input type="email" value={identity} onChange={event => setIdentity(event.target.value)} autoComplete="username" className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
               <Label>{tr(language, "كلمة المرور", "Password")}</Label>
@@ -1177,7 +1176,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
               <SheetContent side={language === "ar" ? "right" : "left"} dir={dir} className="w-[86vw] max-w-[330px] p-0">
                 <SheetHeader className="border-b border-slate-100 p-5"><SheetTitle className={language === "ar" ? "text-right" : "text-left"}><Brand compact /></SheetTitle></SheetHeader>
                 <div className="flex-1 overflow-y-auto p-3"><SidebarNav items={items} page={page} onChange={navigate} /></div>
-                <div className="border-t border-slate-100 p-4"><Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => signOut(auth)}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></div>
+                <div className="border-t border-slate-100 p-4"><Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => void logoutHabatAndReload()}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></div>
               </SheetContent>
             </Sheet>
             <Brand compact />
@@ -1209,7 +1208,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
               type="button"
               variant="outline"
               className="hidden shrink-0 rounded-xl lg:inline-flex"
-              onClick={() => signOut(auth)}
+              onClick={() => void logoutHabatAndReload()}
             >
               {tr(language, "خروج", "Sign out")}
             </Button>
@@ -1225,9 +1224,82 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
   );
 }
 
-async function loadContext(): Promise<AccessState> {
-  try { return { status: "ready", context: await habatApi<HabatContext>("v2/context") }; }
-  catch (error) { return { status: "forbidden", message: extendedError(error, language) }; }
+async function logoutHabatAndReload() {
+  try {
+    await habatLogout();
+  } finally {
+    window.location.reload();
+  }
+}
+
+async function loadContext(language: "ar" | "en"): Promise<AccessState> {
+  try {
+    const session = await habatSession();
+    if (session.mustChangePassword) return { status: "change-password" };
+    return { status: "ready", context: await habatApi<HabatContext>("v2/context") };
+  } catch (error) {
+    if ((error as { status?: number })?.status === 401) {
+      return { status: "signed-out" };
+    }
+    if ((error as { code?: string })?.code === "habat_password_change_required") {
+      return { status: "change-password" };
+    }
+    return { status: "forbidden", message: extendedError(error, language) };
+  }
+}
+
+function ChangePasswordScreen({ onChanged }: { onChanged: () => Promise<void> }) {
+  const { language } = useLanguage();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    if (newPassword.length < 10 || newPassword !== confirmation) {
+      setError(tr(language, "استخدم 10 أحرف على الأقل وتأكد من تطابق كلمتي المرور.", "Use at least 10 characters and matching passwords."));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await habatChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      await onChanged();
+    } catch (caught) {
+      setError(friendlyHabatError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main dir={languageDir(language)} className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4 py-10">
+      <section className="w-full max-w-md space-y-5 rounded-[32px] border border-slate-200 bg-white p-7 shadow-xl">
+        <Brand />
+        <h2 className="text-center font-black">{tr(language, "تغيير كلمة المرور المؤقتة", "Change temporary password")}</h2>
+        <form onSubmit={submit} className="space-y-4">
+          <label className="block text-sm font-bold">{tr(language, "كلمة المرور الحالية", "Current password")}
+            <Input type="password" autoComplete="current-password" required value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} className="mt-2 h-12 rounded-2xl bg-slate-50" />
+          </label>
+          <label className="block text-sm font-bold">{tr(language, "كلمة المرور الجديدة (10 أحرف على الأقل)", "New password (at least 10 characters)")}
+            <Input type="password" autoComplete="new-password" required minLength={10} value={newPassword} onChange={event => setNewPassword(event.target.value)} className="mt-2 h-12 rounded-2xl bg-slate-50" />
+          </label>
+          <label className="block text-sm font-bold">{tr(language, "تأكيد كلمة المرور", "Confirm password")}
+            <Input type="password" autoComplete="new-password" required minLength={10} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="mt-2 h-12 rounded-2xl bg-slate-50" />
+          </label>
+          {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+          <Button disabled={busy} className="h-12 w-full rounded-2xl bg-black">{tr(language, "حفظ ومتابعة", "Save and continue")}</Button>
+          <Button type="button" variant="outline" disabled={busy} className="w-full rounded-2xl" onClick={() => void logoutHabatAndReload()}>{tr(language, "تسجيل الخروج", "Sign out")}</Button>
+        </form>
+      </section>
+    </main>
+  );
 }
 
 function LoadingHabatScreen() {
@@ -1250,16 +1322,25 @@ export default function HabatAttendanceAppV4() {
   useWesternDigitsBoundary();
   const [access, setAccess] = useState<AccessState>({ status: "loading" });
 
-  useEffect(() => onAuthStateChanged(auth, async user => {
-    if (!user) { setAccess({ status: "signed-out" }); return; }
-    setAccess({ status: "loading" });
-    setAccess(await loadContext());
-  }), []);
+  useEffect(() => {
+    let active = true;
 
-  const refreshContext = useCallback(async () => { setAccess(await loadContext()); }, []);
+    void loadContext(language).then(next => {
+      if (active) setAccess(next);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [language]);
+
+  const refreshContext = useCallback(async () => {
+    setAccess(await loadContext(language));
+  }, [language]);
 
   if (access.status === "loading") return <LoadingHabatScreen />;
-  if (access.status === "signed-out") return <LoginScreen />;
-  if (access.status === "forbidden") return <main dir={languageDir(language)} className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4"><section className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-7 text-center shadow-sm"><ShieldCheck className="mx-auto mb-4 text-slate-400" size={34} /><h2 className="text-xl font-black">{tr(language, "غير مصرح بالدخول", "Access denied")}</h2><p className="mt-2 text-sm text-slate-500">{access.message}</p><Button type="button" className="mt-5 rounded-xl bg-black" onClick={() => signOut(auth)}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></section></main>;
+  if (access.status === "signed-out") return <LoginScreen onSignedIn={refreshContext} />;
+  if (access.status === "change-password") return <ChangePasswordScreen onChanged={refreshContext} />;
+  if (access.status === "forbidden") return <main dir={languageDir(language)} className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4"><section className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-7 text-center shadow-sm"><ShieldCheck className="mx-auto mb-4 text-slate-400" size={34} /><h2 className="text-xl font-black">{tr(language, "غير مصرح بالدخول", "Access denied")}</h2><p className="mt-2 text-sm text-slate-500">{access.message}</p><Button type="button" className="mt-5 rounded-xl bg-black" onClick={() => void logoutHabatAndReload()}>{tr(language, "تسجيل الخروج", "Sign out")}</Button></section></main>;
   return <AttendanceShell context={access.context} onContextRefresh={refreshContext} />;
 }

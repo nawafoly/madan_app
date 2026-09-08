@@ -10,17 +10,6 @@ import {
   UserPlus,
   UsersRound,
 } from "lucide-react";
-import { deleteApp, initializeApp } from "firebase/app";
-import {
-  createUserWithEmailAndPassword,
-  deleteUser,
-  getAuth,
-  inMemoryPersistence,
-  sendPasswordResetEmail,
-  setPersistence,
-  signOut,
-  updateProfile,
-} from "firebase/auth";
 import {
   useCallback,
   useEffect,
@@ -28,7 +17,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { auth } from "@/_core/firebase";
+import { habatProvisionCredentials, habatResetPassword } from "./habatAuthClient";
 import {
   friendlyHabatError,
   habatApi,
@@ -41,17 +30,6 @@ type Props = {
 
 type AccountMode = "new" | "existing";
 type AccessLevel = "employee" | "manager";
-
-const firebaseConfig = {
-  apiKey: String(import.meta.env.VITE_FB_API_KEY ?? "").trim(),
-  authDomain: String(import.meta.env.VITE_FB_AUTH_DOMAIN ?? "").trim(),
-  projectId: String(import.meta.env.VITE_FB_PROJECT_ID ?? "").trim(),
-  storageBucket: String(import.meta.env.VITE_FB_STORAGE_BUCKET ?? "").trim(),
-  messagingSenderId: String(
-    import.meta.env.VITE_FB_MESSAGING_SENDER_ID ?? ""
-  ).trim(),
-  appId: String(import.meta.env.VITE_FB_APP_ID ?? "").trim(),
-};
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -75,26 +53,6 @@ function generateTemporaryPassword() {
   return random.join("");
 }
 
-function firebaseAccountError(error: unknown) {
-  const code = String((error as { code?: unknown })?.code || "");
-  switch (code) {
-    case "auth/email-already-in-use":
-      return "هذا البريد لديه حساب تسجيل دخول بالفعل. اختر «ربط حساب موجود» بدل إنشاء حساب جديد.";
-    case "auth/invalid-email":
-      return "البريد الإلكتروني غير صحيح.";
-    case "auth/weak-password":
-      return "كلمة المرور المؤقتة ضعيفة. استخدم 6 أحرف على الأقل.";
-    case "auth/operation-not-allowed":
-      return "تسجيل الدخول بالبريد وكلمة المرور غير مفعّل في Firebase.";
-    case "auth/too-many-requests":
-      return "تم تنفيذ محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.";
-    case "auth/user-not-found":
-      return "حساب تسجيل الدخول غير موجود.";
-    default:
-      return friendlyHabatError(error);
-  }
-}
-
 export default function HabatAccountManagement({ onDataChanged }: Props) {
   const { language } = useLanguage();
   const [accounts, setAccounts] = useState<HabatAccessAccount[]>([]);
@@ -105,6 +63,10 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
   const [editingDisplayName, setEditingDisplayName] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [credentialAccount, setCredentialAccount] = useState<HabatAccessAccount | null>(null);
+  const [credentialPassword, setCredentialPassword] = useState("");
+  const [credentialConfirmation, setCredentialConfirmation] = useState("");
+  const [credentialError, setCredentialError] = useState("");
 
   const [mode, setMode] = useState<AccountMode>("new");
   const [displayName, setDisplayName] = useState("");
@@ -113,13 +75,6 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [accessLevel, setAccessLevel] = useState<AccessLevel>("manager");
   const [clockEnabled, setClockEnabled] = useState(false);
-
-  const firebaseConfigured = Boolean(
-    firebaseConfig.apiKey &&
-      firebaseConfig.authDomain &&
-      firebaseConfig.projectId &&
-      firebaseConfig.appId
-  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -163,7 +118,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
     targetAccessLevel: AccessLevel,
     targetClockEnabled: boolean
   ) {
-    await habatApi("access", {
+    return habatApi<{ ok: true; account: HabatAccessAccount }>("access", {
       method: "POST",
       body: JSON.stringify({
         email: targetEmail,
@@ -192,12 +147,8 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
       return;
     }
     if (mode === "new") {
-      if (!firebaseConfigured) {
-        setError("إعداد Firebase غير مكتمل لهذا الموقع.");
-        return;
-      }
-      if (password.length < 6) {
-        setError("كلمة المرور المؤقتة يجب أن تكون 6 أحرف على الأقل.");
+      if (password.length < 10) {
+        setError("كلمة المرور المؤقتة يجب أن تكون 10 أحرف على الأقل.");
         return;
       }
       if (password !== confirmPassword) {
@@ -207,70 +158,36 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
     }
 
     setSaving(true);
-    let provisionedUser: Awaited<
-      ReturnType<typeof createUserWithEmailAndPassword>
-    >["user"] | null = null;
-    let secondaryApp: ReturnType<typeof initializeApp> | null = null;
-
+    let accessSaved = false;
     try {
+      const { account } = await grantHabatAccess(
+        normalizedEmail, normalizedName, accessLevel, clockEnabled
+      );
+      accessSaved = true;
       if (mode === "new") {
-        const appName = `habat-account-provision-${Date.now()}-${crypto.randomUUID()}`;
-        secondaryApp = initializeApp(firebaseConfig, appName);
-        const secondaryAuth = getAuth(secondaryApp);
-        await setPersistence(secondaryAuth, inMemoryPersistence);
-
-        const credential = await createUserWithEmailAndPassword(
-          secondaryAuth,
-          normalizedEmail,
-          password
-        );
-        provisionedUser = credential.user;
-        await updateProfile(credential.user, { displayName: normalizedName });
-
-        try {
-          await grantHabatAccess(
-            normalizedEmail,
-            normalizedName,
-            accessLevel,
-            clockEnabled
-          );
-        } catch (accessError) {
-          // Avoid leaving an orphan Firebase login if the Habbat permission write fails.
-          try {
-            await deleteUser(credential.user);
-          } catch (rollbackError) {
-            console.warn("[habat-accounts] auth rollback failed", rollbackError);
-          }
-          provisionedUser = null;
-          throw accessError;
-        }
-
-        await signOut(secondaryAuth).catch(() => undefined);
-      } else {
-        await grantHabatAccess(
-          normalizedEmail,
-          normalizedName,
-          accessLevel,
-          clockEnabled
-        );
+        await habatProvisionCredentials(account.id, password);
       }
 
       const roleLabel = accessLevel === "manager" ? "إدارة" : "موظف";
       setMessage(
         mode === "new"
           ? `تم إنشاء حساب تسجيل الدخول ومنحه صلاحية ${roleLabel} في حبات الورق.`
-          : `تم ربط الحساب الموجود ومنحه صلاحية ${roleLabel} في حبات الورق.`
+          : `تم حفظ صلاحية ${roleLabel}. إذا لم تُجهّز كلمة المرور بعد، استخدم «تجهيز الدخول» من قائمة الحسابات.`
       );
       resetForm();
       await refresh();
       await onDataChanged?.();
     } catch (caught) {
-      setError(firebaseAccountError(caught));
-    } finally {
-      if (secondaryApp) {
-        await deleteApp(secondaryApp).catch(() => undefined);
+      // The access and Workforce records are durable even if credentials fail.
+      // Refresh the actual state so a retry cannot overwrite an existing password.
+      if (accessSaved) {
+        setPassword("");
+        setConfirmPassword("");
+        await refresh();
+        await onDataChanged?.();
       }
-      void provisionedUser;
+      setError(`${accessSaved ? "تم حفظ الصلاحية. راجع حالة الدخول في القائمة لإكمال التجهيز. " : ""}${friendlyHabatError(caught)}`);
+    } finally {
       setSaving(false);
     }
   }
@@ -326,15 +243,44 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
     cancelEditAccount();
   }
 
-  async function sendReset(account: HabatAccessAccount) {
-    setBusyAccountId(account.id);
+  function openCredentials(account: HabatAccessAccount) {
+    setCredentialAccount(account);
+    setCredentialPassword("");
+    setCredentialConfirmation("");
+    setCredentialError("");
     setError("");
     setMessage("");
+  }
+
+  async function saveCredentials(event: FormEvent) {
+    event.preventDefault();
+    const account = credentialAccount;
+    if (!account || busyAccountId) return;
+    if (credentialPassword.length < 10) {
+      setCredentialError("كلمة المرور المؤقتة يجب أن تكون 10 أحرف على الأقل.");
+      return;
+    }
+    if (credentialPassword !== credentialConfirmation) {
+      setCredentialError("تأكيد كلمة المرور غير مطابق.");
+      return;
+    }
+    setBusyAccountId(account.id);
+    setCredentialError("");
     try {
-      await sendPasswordResetEmail(auth, account.email);
-      setMessage(`تم إرسال رابط إعادة تعيين كلمة المرور إلى ${account.email}.`);
+      if (account.credentialsProvisioned) {
+        await habatResetPassword(account.id, credentialPassword);
+      } else {
+        await habatProvisionCredentials(account.id, credentialPassword);
+      }
+      setCredentialAccount(null);
+      setCredentialPassword("");
+      setCredentialConfirmation("");
+      setMessage(`تم تعيين كلمة مرور مؤقتة لـ ${account.email}. يجب تغييرها عند الدخول التالي.`);
+      await refresh();
+      await onDataChanged?.();
     } catch (caught) {
-      setError(firebaseAccountError(caught));
+      setCredentialError(friendlyHabatError(caught));
+      await refresh();
     } finally {
       setBusyAccountId("");
     }
@@ -420,6 +366,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                 <div className="mt-2 flex gap-2">
                   <input
                     type="text"
+                    minLength={10}
                     value={password}
                     onChange={event => setPassword(event.target.value)}
                     className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 font-mono outline-none focus:border-slate-900"
@@ -442,6 +389,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                 تأكيد كلمة المرور
                 <input
                   type="text"
+                  minLength={10}
                   value={confirmPassword}
                   onChange={event => setConfirmPassword(event.target.value)}
                   className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 font-mono outline-none focus:border-slate-900"
@@ -451,7 +399,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
             </>
           ) : (
             <div className="rounded-2xl bg-blue-50 px-4 py-4 text-sm font-semibold text-blue-800 lg:col-span-2">
-              استخدم هذا الخيار عندما يكون البريد لديه حساب Firebase مسبقًا. لن يتم تغيير كلمة مروره؛ سيتم فقط منحه صلاحية دخول حبات الورق.
+              يحفظ هذا الخيار صلاحيات الحساب دون تغيير كلمة المرور. إذا لم تُجهّز بيانات الدخول بعد، يمكنك تجهيزها من قائمة الحسابات.
             </div>
           )}
 
@@ -513,7 +461,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
           <div>
             <h3 className="font-black">{tr(language, "الحسابات المصرح لها", "Authorized Accounts")}</h3>
             <p className="text-sm text-slate-500">
-              الإيقاف هنا يمنع دخول حبات الورق ولا يحذف حساب Firebase.
+              الإيقاف يمنع دخول حبات الورق مع الاحتفاظ بالحساب وسجل الحضور.
             </p>
           </div>
         </div>
@@ -593,6 +541,15 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                         {account.isActive ? tr(language, "فعال", "Active") : tr(language, "موقوف", "Disabled")}
                       </span>
                     </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {account.credentialsProvisioned === undefined
+                        ? tr(language, "حالة الدخول غير متاحة — حدّث القائمة", "Sign-in status unavailable — refresh the list")
+                        : !account.credentialsProvisioned
+                          ? tr(language, "لم تُجهّز بيانات الدخول بعد", "Sign-in credentials not provisioned")
+                          : account.mustChangePassword
+                            ? tr(language, "الدخول مجهّز — يلزم تغيير كلمة المرور", "Sign-in ready — password change required")
+                            : tr(language, "الدخول مجهّز", "Sign-in ready")}
+                    </p>
                   </div>
 
                   <select
@@ -629,11 +586,11 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                   <div className="flex flex-wrap gap-2 xl:justify-end">
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => void sendReset(account)}
+                      disabled={busy || !account.isActive || account.credentialsProvisioned === undefined}
+                      onClick={() => openCredentials(account)}
                       className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black hover:bg-slate-50 disabled:opacity-50"
                     >
-                      <KeyRound size={14} /> {tr(language, "إعادة كلمة المرور", "Reset Password")}
+                      <KeyRound size={14} /> {account.credentialsProvisioned ? tr(language, "إعادة كلمة المرور", "Reset Password") : tr(language, "تجهيز الدخول", "Set Up Sign-in")}
                     </button>
                     <button
                       type="button"
@@ -660,6 +617,25 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
           </p>
         )}
       </section>
+      {credentialAccount ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="habat-credential-title">
+          <form onSubmit={saveCredentials} className="w-full max-w-md space-y-4 rounded-[28px] bg-white p-6 shadow-xl">
+            <h3 id="habat-credential-title" className="font-black">{credentialAccount.email}</h3>
+            <p className="text-sm text-slate-500">كلمة مرور مؤقتة من 10 أحرف على الأقل. سلّمها لصاحب الحساب عبر قناة خاصة؛ سيُطلب منه تغييرها. إعادة التعيين تنهي جلساته الحالية.</p>
+            <label className="block text-sm font-bold">كلمة مرور مؤقتة
+              <input type="password" autoComplete="new-password" minLength={10} required value={credentialPassword} onChange={event => setCredentialPassword(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3" />
+            </label>
+            <label className="block text-sm font-bold">تأكيد كلمة المرور
+              <input type="password" autoComplete="new-password" minLength={10} required value={credentialConfirmation} onChange={event => setCredentialConfirmation(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3" />
+            </label>
+            {credentialError ? <p role="alert" className="text-sm text-red-700">{credentialError}</p> : null}
+            <div className="flex gap-2">
+              <button disabled={Boolean(busyAccountId)} className="rounded-xl bg-black px-4 py-3 font-bold text-white disabled:opacity-50">حفظ كلمة المرور</button>
+              <button type="button" disabled={Boolean(busyAccountId)} onClick={() => { setCredentialAccount(null); setCredentialPassword(""); setCredentialConfirmation(""); }} className="rounded-xl border px-4 py-3 font-bold">إلغاء</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

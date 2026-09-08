@@ -1,5 +1,3 @@
-import { auth } from "@/_core/firebase";
-
 const WORKFORCE_API_BASE = String(
   import.meta.env.VITE_WORKFORCE_API_BASE || "/habat-api/workforce/v1"
 ).replace(/\/$/, "");
@@ -115,13 +113,8 @@ export class WorkforceApiError extends Error {
 }
 
 export async function workforceApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new WorkforceApiError(401, "workforce_authentication_required");
-
-  const token = await currentUser.getIdToken();
   const headers = new Headers(init?.headers || {});
   headers.set("Accept", "application/json");
-  headers.set("Authorization", `Bearer ${token}`);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -129,6 +122,7 @@ export async function workforceApi<T>(path: string, init?: RequestInit): Promise
   const response = await fetch(`${WORKFORCE_API_BASE}/${path.replace(/^\/+/, "")}`, {
     ...init,
     headers,
+    credentials: "same-origin",
   });
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
 

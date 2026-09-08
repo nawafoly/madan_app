@@ -1,14 +1,6 @@
-import { auth } from "@/_core/firebase";
-
-const HABAT_API_BASE_URL = String(import.meta.env.VITE_HABAT_API_BASE_URL ?? "")
-  .trim()
-  .replace(/\/+$/, "");
-
 function buildHabatApiUrl(path: string): string {
   const normalizedPath = path.replace(/^\/+/, "");
-  return HABAT_API_BASE_URL
-    ? `${HABAT_API_BASE_URL}/${normalizedPath}`
-    : `/habat-api/${normalizedPath}`;
+  return `/habat-api/${normalizedPath}`;
 }
 
 export type HabatPrincipal = {
@@ -94,6 +86,8 @@ export type HabatAccessAccount = {
   accessLevel: "employee" | "manager";
   clockEnabled: boolean;
   isActive: boolean;
+  credentialsProvisioned?: boolean;
+  mustChangePassword?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -176,13 +170,8 @@ export class HabatApiError extends Error {
 }
 
 export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new HabatApiError(401, "authentication_required");
-
-  const token = await currentUser.getIdToken();
   const headers = new Headers(init?.headers || {});
   headers.set("Accept", "application/json");
-  headers.set("Authorization", `Bearer ${token}`);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -190,6 +179,7 @@ export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> 
   const response = await fetch(buildHabatApiUrl(path), {
     ...init,
     headers,
+    credentials: "same-origin",
   });
   const payload = (await response.json().catch(() => null)) as
     | Record<string, unknown>
@@ -213,6 +203,31 @@ export function friendlyHabatError(error: unknown): string {
       : String((error as { message?: unknown })?.message || "");
 
   switch (code) {
+    case "invalid_credentials":
+      return "البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لم تُجهّز بيانات الدخول بعد.";
+    case "account_temporarily_locked":
+      return "تم إيقاف المحاولات مؤقتًا. انتظر 15 دقيقة أو تواصل مع الإدارة.";
+    case "habat_session_required":
+      return "انتهت جلسة الدخول. سجّل الدخول مجددًا.";
+    case "habat_password_change_required":
+      return "يجب تغيير كلمة المرور المؤقتة قبل متابعة العمل.";
+    case "password_too_short":
+      return "كلمة المرور يجب أن تكون 10 أحرف على الأقل.";
+    case "new_password_must_differ":
+      return "اختر كلمة مرور مختلفة عن كلمة المرور الحالية.";
+    case "invalid_current_password":
+      return "كلمة المرور الحالية غير صحيحة.";
+    case "habat_credentials_already_exist":
+      return "بيانات الدخول موجودة بالفعل. استخدم إعادة كلمة المرور عند الحاجة.";
+    case "habat_credentials_not_found":
+    case "habat_credentials_missing":
+      return "لم تُجهّز بيانات الدخول لهذا الحساب بعد. حدّث القائمة ثم اختر تجهيز الدخول.";
+    case "habat_access_inactive":
+      return "فعّل صلاحية الحساب قبل تجهيز كلمة المرور.";
+    case "habat_manager_required":
+      return "هذه العملية مخصصة للإدارة.";
+    case "habat_auth_origin_forbidden":
+      return "افتح نظام حبات الورق من عنوانه المعتمد لتنفيذ العملية.";
     case "habat_access_forbidden":
       return "هذا الحساب غير مصرح له بالدخول إلى نظام حبات الورق.";
     case "habat_clock_forbidden":
