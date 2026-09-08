@@ -17,7 +17,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="حبات الورق" />
+  <meta name="apple-mobile-web-app-title" content="MAEDIN" />
   <script type="module">
     const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase();
     const isHabatAttendance = appMode === "habat-attendance";
@@ -55,6 +55,7 @@
         if (element) element.setAttribute("content", value);
       };
 
+      setMetaContent('meta[name="apple-mobile-web-app-title"]', "حبات الورق");
       setMetaContent('meta[property="og:site_name"]', "حبات الورق");
       setMetaContent('meta[property="og:title"]', "حبات الورق - نظام الحضور والانصراف");
       setMetaContent(
