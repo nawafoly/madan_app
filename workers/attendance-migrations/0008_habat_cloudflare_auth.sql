@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS habat_auth_credentials (
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
   password_algorithm TEXT NOT NULL DEFAULT 'pbkdf2-sha256',
-  password_iterations INTEGER NOT NULL DEFAULT 600000
+  password_iterations INTEGER NOT NULL DEFAULT 100000
     CHECK (password_iterations > 0),
   must_change_password INTEGER NOT NULL DEFAULT 0
     CHECK (must_change_password IN (0, 1)),

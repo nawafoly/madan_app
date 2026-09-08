@@ -141,7 +141,7 @@ try {
   await api("auth/admin/credentials", { jar: manager, body: { accessId, password: temporaryPassword }, status: 409 });
   assert.equal((await account()).mustChangePassword, true);
   const credential = await db.prepare("SELECT * FROM habat_auth_credentials WHERE access_id = ?").bind(accessId).first();
-  assert.equal(credential.password_iterations, 600000);
+  assert.equal(credential.password_iterations, 100000);
   assert.notEqual(credential.password_hash, temporaryPassword);
   const employee = {};
   const firstLogin = await api("auth/login", { jar: employee, body: { email: "employee@example.test", password: temporaryPassword } });
