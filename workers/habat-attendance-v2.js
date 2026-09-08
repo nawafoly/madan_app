@@ -1568,12 +1568,28 @@ function normalizeOptionalIso(value, fallback) {
 }
 
 function normalizeWorkingDays(value) {
-  const source = Array.isArray(value)
-    ? value
-    : String(value ?? "")
+  let source;
+
+  if (Array.isArray(value)) {
+    source = value;
+  } else {
+    const text = String(value ?? "").trim();
+
+    if (text.startsWith("[") && text.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(text);
+        source = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        source = [];
+      }
+    } else {
+      source = text
         .split(",")
         .map(item => item.trim())
         .filter(Boolean);
+    }
+  }
+
   return Array.from(
     new Set(
       source
