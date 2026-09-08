@@ -1,6 +1,7 @@
 import {
   handleWorkforceCoreRequest,
   workforceSafeHandler,
+  provisionWorkforceSourceEmployee,
 } from "./workforce-core.js";
 
 const TENANT = {
@@ -17,6 +18,35 @@ const TENANT = {
  * Tenant names and legacy source-table knowledge are allowed here only. All new
  * workforce business logic stays in workforce-core.js and workforce_* tables.
  */
+export async function provisionHabatAccessToWorkforce(db, access) {
+  if (!db || !access?.id) {
+    throw new Error("habat_workforce_provision_invalid");
+  }
+
+  const workforceEnabled =
+    String(access.access_level || "").trim() === "employee" ||
+    Number(access.clock_enabled) === 1;
+
+  return provisionWorkforceSourceEmployee({
+    db,
+    tenant: TENANT,
+    sourceType: "legacy_attendance_access",
+    source: {
+      id: access.id,
+      uid: access.uid || null,
+      email: access.email || null,
+      displayName: access.display_name || null,
+      isActive: Number(access.is_active) === 1,
+      workforceEnabled,
+    },
+    baselineSchedule: {
+      templateId: "wf_sched_habat_shift_default",
+      effectiveFrom: "1970-01-01",
+      assignmentId: `wf_asg_legacy_default_${access.id}`,
+    },
+  });
+}
+
 export async function handleHabatWorkforceRequest({
   request,
   url,

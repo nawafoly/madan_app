@@ -1,3 +1,5 @@
+import { provisionHabatAccessToWorkforce } from "./habat-workforce-adapter.js";
+
 const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);
 const HABAT_DEFAULT_RECORD_LIMIT = 100;
 const HABAT_MAX_RECORD_LIMIT = 300;
@@ -478,8 +480,13 @@ async function createAccess(db, request, requester) {
       .prepare(`SELECT * FROM habat_attendance_access WHERE lower(email) = ? LIMIT 1`)
       .bind(email)
       .first();
+    const workforce = await syncAccessWithWorkforce(db, row);
     await writeAudit(db, requester, "create_or_enable_access", "habat_attendance_access", row?.id || id, null, row);
-    return json(200, { ok: true, account: mapAccessRow(row) });
+    return json(200, {
+      ok: true,
+      account: mapAccessRow(row),
+      workforceReady: workforce.ok,
+    });
   } catch (error) {
     console.error("[habat-attendance] access create failed", error);
     return json(500, { ok: false, message: "habat_access_create_failed" });
@@ -525,8 +532,13 @@ async function updateAccess(db, request, requester, id) {
       .prepare(`SELECT * FROM habat_attendance_access WHERE id = ? LIMIT 1`)
       .bind(id)
       .first();
+    const workforce = await syncAccessWithWorkforce(db, next);
     await writeAudit(db, requester, "update_access", "habat_attendance_access", id, current, next);
-    return json(200, { ok: true, account: mapAccessRow(next) });
+    return json(200, {
+      ok: true,
+      account: mapAccessRow(next),
+      workforceReady: workforce.ok,
+    });
   } catch (error) {
     console.error("[habat-attendance] access update failed", error);
     return json(500, { ok: false, message: "habat_access_update_failed" });
@@ -547,6 +559,19 @@ async function deleteAccess(db, requester, id) {
   } catch (error) {
     console.error("[habat-attendance] access delete failed", error);
     return json(500, { ok: false, message: "habat_access_delete_failed" });
+  }
+}
+
+async function syncAccessWithWorkforce(db, access) {
+  try {
+    const result = await provisionHabatAccessToWorkforce(db, access);
+    return { ok: true, result };
+  } catch (error) {
+    console.error("[habat-attendance] workforce provisioning failed", {
+      accessId: access?.id || null,
+      error,
+    });
+    return { ok: false, error };
   }
 }
 

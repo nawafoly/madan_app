@@ -268,6 +268,228 @@ async function ensureTenant(db, tenant) {
     .run();
 }
 
+export async function provisionWorkforceSourceEmployee({
+  db,
+  tenant,
+  sourceType,
+  source,
+  baselineSchedule = null,
+}) {
+  const sourceId = clean(source?.id);
+
+  if (!db || !tenant?.id || !sourceId) {
+    throw new Error("workforce_source_provision_invalid");
+  }
+
+  const normalizedSourceType = clean(sourceType) || "legacy_employee_source";
+  const now = nowIso();
+
+  let employee = await db
+    .prepare(
+      `SELECT id
+         FROM workforce_employee_profiles
+        WHERE tenant_id = ? AND source_type = ? AND source_id = ?
+        LIMIT 1`
+    )
+    .bind(tenant.id, normalizedSourceType, sourceId)
+    .first();
+
+  const sourceActive = source?.isActive !== false;
+  const workforceEnabled = source?.workforceEnabled !== false;
+  const workforceActive = sourceActive && workforceEnabled;
+
+  /*
+   * A management-only account that has never belonged to Workforce should not
+   * receive an unnecessary employee profile. If it used to be workforce-enabled,
+   * the existing profile is retained and deactivated below for history.
+   */
+  if (!workforceEnabled && !employee) {
+    return {
+      employeeId: null,
+      created: false,
+      updated: false,
+      linked: false,
+      scheduled: false,
+      active: false,
+      skipped: true,
+    };
+  }
+
+  const accountUid = clean(source?.accountUid || source?.uid) || null;
+  const accountEmail =
+    clean(source?.accountEmail || source?.email).toLowerCase() || null;
+  const displayName =
+    clean(source?.displayName || source?.name) ||
+    accountEmail ||
+    sourceId;
+
+  const workforceStatus = workforceActive ? "active" : "inactive";
+  const attendanceStatus = workforceActive ? "confirmed" : "unlinked";
+
+  let created = false;
+
+  if (!employee) {
+    const employeeId = id("wf_emp");
+
+    await db
+      .prepare(
+        `INSERT INTO workforce_employee_profiles (
+           id, tenant_id, account_uid, account_email, display_name, status,
+           source_type, source_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        employeeId,
+        tenant.id,
+        accountUid,
+        accountEmail,
+        displayName,
+        workforceStatus,
+        normalizedSourceType,
+        sourceId,
+        now,
+        now
+      )
+      .run();
+
+    employee = { id: employeeId };
+    created = true;
+  } else {
+    await db
+      .prepare(
+        `UPDATE workforce_employee_profiles
+            SET account_uid = COALESCE(?, account_uid),
+                account_email = COALESCE(?, account_email),
+                display_name = ?,
+                status = ?,
+                updated_at = ?
+          WHERE id = ? AND tenant_id = ?`
+      )
+      .bind(
+        accountUid,
+        accountEmail,
+        displayName,
+        workforceStatus,
+        now,
+        employee.id,
+        tenant.id
+      )
+      .run();
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO workforce_employment (
+         employee_id, tenant_id, employment_status, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(employee_id) DO UPDATE SET
+         employment_status = excluded.employment_status,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      employee.id,
+      tenant.id,
+      workforceStatus,
+      now,
+      now
+    )
+    .run();
+
+  await db
+    .prepare(
+      `INSERT INTO workforce_attendance_links (
+         id, tenant_id, employee_id, source_type, source_employee_id, status,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id, employee_id) DO UPDATE SET
+         source_type = excluded.source_type,
+         source_employee_id = excluded.source_employee_id,
+         status = excluded.status,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      id("wf_att_link"),
+      tenant.id,
+      employee.id,
+      normalizedSourceType,
+      sourceId,
+      attendanceStatus,
+      now,
+      now
+    )
+    .run();
+
+  let scheduled = false;
+
+  const templateId = clean(baselineSchedule?.templateId);
+  const effectiveFrom = clean(baselineSchedule?.effectiveFrom);
+  const assignmentId = clean(baselineSchedule?.assignmentId);
+
+  if (workforceActive && templateId && effectiveFrom && assignmentId) {
+    const template = await db
+      .prepare(
+        `SELECT id
+           FROM workforce_schedule_templates
+          WHERE tenant_id = ? AND id = ? AND is_active = 1
+          LIMIT 1`
+      )
+      .bind(tenant.id, templateId)
+      .first();
+
+    if (template?.id) {
+      await db
+        .prepare(
+          `INSERT INTO workforce_schedule_assignments (
+             id, tenant_id, employee_id, template_id,
+             effective_from, effective_to,
+             created_by_uid, created_by_email,
+             created_at
+           ) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?)
+           ON CONFLICT(id) DO NOTHING`
+        )
+        .bind(
+          assignmentId,
+          tenant.id,
+          employee.id,
+          templateId,
+          effectiveFrom,
+          now
+        )
+        .run();
+
+      const assignment = await db
+        .prepare(
+          `SELECT id
+             FROM workforce_schedule_assignments
+            WHERE id = ?
+              AND tenant_id = ?
+              AND employee_id = ?
+              AND template_id = ?
+            LIMIT 1`
+        )
+        .bind(
+          assignmentId,
+          tenant.id,
+          employee.id,
+          templateId
+        )
+        .first();
+
+      scheduled = Boolean(assignment?.id);
+    }
+  }
+
+  return {
+    employeeId: employee.id,
+    created,
+    updated: !created,
+    linked: true,
+    scheduled,
+    active: workforceActive,
+    skipped: false,
+  };
+}
+
 async function syncSourceEmployees({ db, tenant, principal, sourceAdapter }) {
   const sourceRows = await sourceAdapter.listEmployees();
   const rows = Array.isArray(sourceRows) ? sourceRows : [];
