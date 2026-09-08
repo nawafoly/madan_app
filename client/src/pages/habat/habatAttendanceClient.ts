@@ -1,5 +1,16 @@
 import { auth } from "@/_core/firebase";
 
+const HABAT_API_BASE_URL = String(import.meta.env.VITE_HABAT_API_BASE_URL ?? "")
+  .trim()
+  .replace(/\/+$/, "");
+
+function buildHabatApiUrl(path: string): string {
+  const normalizedPath = path.replace(/^\/+/, "");
+  return HABAT_API_BASE_URL
+    ? `${HABAT_API_BASE_URL}/${normalizedPath}`
+    : `/habat-api/${normalizedPath}`;
+}
+
 export type HabatPrincipal = {
   uid: string | null;
   email: string | null;
@@ -176,7 +187,7 @@ export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> 
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`/habat-api/${path.replace(/^\/+/, "")}`, {
+  const response = await fetch(buildHabatApiUrl(path), {
     ...init,
     headers,
   });
