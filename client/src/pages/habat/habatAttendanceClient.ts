@@ -1,3 +1,5 @@
+import { getHabatRealtimeClientId } from "./habatRealtimeClient";
+
 function buildHabatApiUrl(path: string): string {
   const normalizedPath = path.replace(/^\/+/, "");
   return `/habat-api/${normalizedPath}`;
@@ -171,6 +173,7 @@ export class HabatApiError extends Error {
 
 export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});
+  headers.set("X-Habat-Client-Id", getHabatRealtimeClientId());
   headers.set("Accept", "application/json");
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");

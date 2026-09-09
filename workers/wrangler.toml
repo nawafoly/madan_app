@@ -34,3 +34,13 @@ migrations_dir = "attendance-migrations"
 binding = "HR_DB"
 database_name = "maedin-hr"
 database_id = "6b2d4040-669f-434c-a74c-de2118ae9942"
+
+# Habat realtime event delivery only.
+# D1 remains the system of record; the Durable Object stores no attendance data.
+[[durable_objects.bindings]]
+name = "HABAT_REALTIME"
+class_name = "HabatRealtimeHub"
+
+[[migrations]]
+tag = "habat_realtime_v1"
+new_classes = ["HabatRealtimeHub"]

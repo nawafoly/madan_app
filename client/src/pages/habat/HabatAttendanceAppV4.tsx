@@ -33,6 +33,7 @@ import {
 import HabatDatePicker from "./HabatDatePicker";
 import HabatTimeInput, { formatHabatShiftRange } from "./HabatTimeInput";
 import { habatLogin, habatLogout, habatSession, habatChangePassword } from "./habatAuthClient";
+import { useHabatRealtimeRefresh } from "./habatRealtimeClient";
 import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -1264,6 +1265,14 @@ function SidebarNav({ items, page, onChange }: { items: NavItem[]; page: PageKey
 function AttendanceShell({ context, onContextRefresh }: { context: HabatContext; onContextRefresh: () => Promise<void> }) {
   const { language, toggleLanguage } = useLanguage();
   const dir = languageDir(language);
+  const [realtimeRevision, setRealtimeRevision] = useState(0);
+
+  const refreshFromRealtime = useCallback(async () => {
+    await onContextRefresh();
+    setRealtimeRevision(value => value + 1);
+  }, [onContextRefresh]);
+
+  useHabatRealtimeRefresh(refreshFromRealtime);
   const [page, setPage] = useState<PageKey>("clock");
   const [selectedEmployee, setSelectedEmployee] = useState<HabatAccessAccount | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -1376,7 +1385,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
 
       <div className="mx-auto grid max-w-[1500px] gap-6 px-3 pb-4 pt-[88px] sm:px-4 sm:pb-6 sm:pt-[92px] lg:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="hidden h-fit rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24 lg:block"><SidebarNav items={items} page={page} onChange={navigate} /></aside>
-        <div className="min-w-0">{content}</div>
+        <div key={realtimeRevision} className="min-w-0">{content}</div>
       </div>
     </main>
   );
