@@ -43,4 +43,4 @@ class_name = "HabatRealtimeHub"
 
 [[migrations]]
 tag = "habat_realtime_v1"
-new_classes = ["HabatRealtimeHub"]
+new_sqlite_classes = ["HabatRealtimeHub"]
