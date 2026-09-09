@@ -1,4 +1,7 @@
+import { resolveWorkforceScheduleDay, resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+
 const DEFAULT_SHIFT_ID = "habat_shift_default";
+const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
 const OVERRIDE_TYPES = new Set(["emergency_leave", "absence"]);
 const DAY_PORTIONS = new Set(["full_day", "half_day"]);
 
@@ -65,13 +68,24 @@ export async function handleHabatAttendanceV3Request({ request, url, db, resolve
 }
 
 async function resolvePrincipal(db, requester) {
+  const accessId = normalizeText(requester?.accessId);
   const uid = normalizeText(requester?.uid);
   const email = normalizeText(requester?.email).toLowerCase();
   const runtimeRole = normalizeText(requester?.runtime?.role).toLowerCase();
 
-  if (uid || email) {
-    try {
-      const row = await db.prepare(
+  try {
+    let row = null;
+
+    if (accessId) {
+      row = await db.prepare(
+        `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
+                created_at, updated_at
+         FROM habat_attendance_access
+         WHERE id = ? AND is_active = 1
+         LIMIT 1`
+      ).bind(accessId).first();
+    } else if (uid || email) {
+      row = await db.prepare(
         `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
                 created_at, updated_at
          FROM habat_attendance_access
@@ -80,28 +94,28 @@ async function resolvePrincipal(db, requester) {
          ORDER BY CASE WHEN uid = ? THEN 0 ELSE 1 END, created_at ASC
          LIMIT 1`
       ).bind(uid, email, uid).first();
-
-      if (row) {
-        const accessLevel = normalizeText(row.access_level) === "manager" ? "manager" : "employee";
-        return {
-          ok: true,
-          accessId: normalizeText(row.id),
-          uid,
-          email: normalizeText(row.email).toLowerCase() || email,
-          displayName: normalizeText(row.display_name) || email || "المستخدم",
-          accessLevel,
-          canManage: accessLevel === "manager",
-          canClock: Number(row.clock_enabled) === 1,
-          createdAt: normalizeText(row.created_at) || null,
-        };
-      }
-    } catch (error) {
-      console.error("[habat-v3] principal lookup failed", error);
-      return { ok: false, response: json(500, { ok: false, message: "habat_access_lookup_failed" }) };
     }
+
+    if (row) {
+      const accessLevel = normalizeText(row.access_level) === "manager" ? "manager" : "employee";
+      return {
+        ok: true,
+        accessId: normalizeText(row.id),
+        uid: normalizeText(row.uid) || uid || null,
+        email: normalizeText(row.email).toLowerCase() || email,
+        displayName: normalizeText(row.display_name) || email || "المستخدم",
+        accessLevel,
+        canManage: accessLevel === "manager",
+        canClock: Number(row.clock_enabled) === 1,
+        createdAt: normalizeText(row.created_at) || null,
+      };
+    }
+  } catch (error) {
+    console.error("[habat-v3] principal lookup failed", error);
+    return { ok: false, response: json(500, { ok: false, message: "habat_access_lookup_failed" }) };
   }
 
-  if (runtimeRole === "owner") {
+  if (!accessId && runtimeRole === "owner") {
     return {
       ok: true,
       accessId: null,
@@ -157,6 +171,14 @@ async function getMonthWorkspace(db, url, principal) {
 
 async function buildMonthWorkspace(db, access, month) {
   const range = monthRange(month);
+  const workforceLink = await db.prepare(
+    `SELECT employee_id
+       FROM workforce_attendance_links
+      WHERE tenant_id = ? AND source_employee_id = ?
+        AND COALESCE(status, 'confirmed') = 'confirmed'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, access.id).first();
+
   const [recordsResult, overridesResult, shiftsResult, assignmentsResult, savedSummary] = await Promise.all([
     db.prepare(
       `SELECT * FROM habat_attendance_records
@@ -187,6 +209,18 @@ async function buildMonthWorkspace(db, access, month) {
   const overrides = overridesResult?.results || [];
   const shifts = shiftsResult?.results || [];
   const assignments = assignmentsResult?.results || [];
+  const workforceSchedules = workforceLink?.employee_id
+    ? await resolveWorkforceScheduleRange(
+        db,
+        WORKFORCE_TENANT_ID,
+        workforceLink.employee_id,
+        range.from,
+        range.to
+      )
+    : [];
+  const workforceScheduleByDate = new Map(
+    (workforceSchedules || []).map(schedule => [normalizeText(schedule.date), schedule])
+  );
   const recordByDate = new Map(records.map(row => [normalizeText(row.attendance_date), row]));
   const overrideByDate = new Map(overrides.map(row => [normalizeText(row.attendance_date), row]));
   const today = getRiyadhDateKey();
@@ -216,7 +250,7 @@ async function buildMonthWorkspace(db, access, month) {
       };
     }
 
-    const shift = resolveShiftForDate(date, assignments, shifts);
+    const shift = resolveV3ShiftForDate(date, workforceScheduleByDate, assignments, shifts);
     const workingDay = shift ? parseWorkingDays(shift.working_days).includes(weekdayIndex(date)) : true;
     const future = date > today;
     const schedule = shift ? buildScheduleWindow(date, shift) : null;
@@ -495,6 +529,26 @@ async function generateMonthlySummary(db, request, requester) {
 }
 
 async function resolveShiftForAccessDate(db, accessId, date) {
+  const link = await db.prepare(
+    `SELECT employee_id
+       FROM workforce_attendance_links
+      WHERE tenant_id = ? AND source_employee_id = ?
+        AND COALESCE(status, 'confirmed') = 'confirmed'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, accessId).first();
+
+  if (link?.employee_id) {
+    const schedule = await resolveWorkforceScheduleDay(
+      db,
+      WORKFORCE_TENANT_ID,
+      link.employee_id,
+      date
+    );
+    if (schedule && schedule.kind !== "unassigned" && schedule.ready) {
+      return mapWorkforceScheduleToV3Shift(schedule, date);
+    }
+  }
+
   const assignment = await db.prepare(
     `SELECT s.* FROM habat_attendance_shift_assignments a
      JOIN habat_attendance_shifts s ON s.id = a.shift_id
@@ -504,6 +558,28 @@ async function resolveShiftForAccessDate(db, accessId, date) {
   ).bind(accessId, date, date).first();
   if (assignment) return assignment;
   return db.prepare(`SELECT * FROM habat_attendance_shifts WHERE id = ? LIMIT 1`).bind(DEFAULT_SHIFT_ID).first();
+}
+
+function resolveV3ShiftForDate(date, workforceScheduleByDate, assignments, shifts) {
+  const schedule = workforceScheduleByDate.get(date);
+  if (schedule && schedule.kind !== "unassigned" && schedule.ready) {
+    return mapWorkforceScheduleToV3Shift(schedule, date);
+  }
+  return resolveShiftForDate(date, assignments, shifts);
+}
+
+function mapWorkforceScheduleToV3Shift(schedule, date) {
+  const weekday = weekdayIndex(date);
+  return {
+    id: normalizeText(schedule.templateId) || `workforce:${normalizeText(schedule.assignmentId)}`,
+    name: normalizeText(schedule.templateName) || (schedule.isWorkingDay ? "Workforce schedule" : "راحة"),
+    start_time: normalizeTime(schedule.startTime),
+    end_time: normalizeTime(schedule.endTime),
+    grace_minutes: Number(schedule.graceMinutes || 0),
+    early_leave_tolerance_minutes: Number(schedule.earlyLeaveToleranceMinutes || 0),
+    working_days: schedule.isWorkingDay ? String(weekday) : "",
+    is_active: 1,
+  };
 }
 
 function resolveShiftForDate(date, assignments, shifts) {

@@ -70,6 +70,11 @@ test("Habat runtime publishes only after successful routed mutations", () => {
 
   assert.match(
     runtime,
+    /pathname === "\/attendance\/habat\/realtime\/ticket"/
+  );
+
+  assert.match(
+    runtime,
     /pathname === "\/attendance\/habat\/realtime"/
   );
 
@@ -84,7 +89,7 @@ test("Habat runtime publishes only after successful routed mutations", () => {
   );
 });
 
-test("Habat browser realtime uses WebSocket and never polls D1", () => {
+test("Habat browser realtime bootstraps a one-time ticket and never polls D1", () => {
   const client = fs.readFileSync(
     new URL(
       "../client/src/pages/habat/habatRealtimeClient.ts",
@@ -93,10 +98,10 @@ test("Habat browser realtime uses WebSocket and never polls D1", () => {
     "utf8"
   );
 
-  assert.match(client, /new WebSocket\(/);
-  assert.match(client, /\/habat-api\/realtime/);
-
-  assert.doesNotMatch(client, /\bfetch\(/);
+  assert.match(client, /new WebSocket\(webSocketUrl\)/);
+  assert.match(client, /fetch\("\/habat-api\/realtime\/ticket"/);
+  assert.match(client, /credentials: "same-origin"/);
+  assert.doesNotMatch(client, /setInterval\([^)]*fetch/);
   assert.doesNotMatch(client, /\bhabatApi\b/);
 });
 
@@ -235,4 +240,16 @@ test("Habat Durable Object uses tagged websocket delivery", () => {
     realtime,
     /const \{\s*audience: _internalAudience,\s*\.\.\.publicEvent\s*\}/
   );
+});
+
+test("Habat realtime tickets are one-time and expire in Durable Object storage", () => {
+  const realtime = fs.readFileSync(
+    new URL("./habat-realtime.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(realtime, /habat-realtime\.internal\/ticket/);
+  assert.match(realtime, /this\.state\.storage\.put\(`ticket:/);
+  assert.match(realtime, /this\.state\.storage\.delete\(key\)/);
+  assert.match(realtime, /expiresAt: Date\.now\(\) \+ 60_000/);
 });

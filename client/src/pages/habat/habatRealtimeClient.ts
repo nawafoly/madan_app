@@ -11,6 +11,11 @@ export type HabatRealtimeEvent = {
 
 type RealtimeListener = (event: HabatRealtimeEvent) => void;
 
+type RealtimeTicketPayload = {
+  ok: true;
+  webSocketUrl: string;
+};
+
 const listeners = new Set<RealtimeListener>();
 
 let socket: WebSocket | null = null;
@@ -20,6 +25,8 @@ let reconnectAttempt = 0;
 let everOpened = false;
 let volatileClientId = "";
 let networkListenersAttached = false;
+let connectGeneration = 0;
+let connectInFlight = false;
 
 const CLIENT_ID_KEY = "habat_realtime_client_id";
 
@@ -62,17 +69,6 @@ export function getHabatRealtimeClientId(): string {
   }
 }
 
-function buildRealtimeUrl(): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = new URL(
-    `${protocol}//${window.location.host}/habat-api/realtime`
-  );
-
-  url.searchParams.set("clientId", getHabatRealtimeClientId());
-
-  return url.toString();
-}
-
 function clearReconnectTimer() {
   if (reconnectTimer !== null) {
     window.clearTimeout(reconnectTimer);
@@ -111,7 +107,7 @@ function scheduleReconnect() {
 
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
-    connect();
+    void connect();
   }, delay);
 }
 
@@ -135,11 +131,41 @@ function startHeartbeat(target: WebSocket) {
   }, 25000);
 }
 
-function connect() {
+async function requestRealtimeTicket(): Promise<string> {
+  const response = await fetch("/habat-api/realtime/ticket", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Habat-Client-Id": getHabatRealtimeClientId(),
+    },
+    body: "{}",
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | RealtimeTicketPayload
+    | { ok?: false; message?: string }
+    | null;
+
+  if (!response.ok || !payload || payload.ok !== true || !("webSocketUrl" in payload)) {
+    throw new Error(
+      String(
+        (payload && "message" in payload && payload.message) ||
+          `habat_realtime_ticket_${response.status}`
+      )
+    );
+  }
+
+  return payload.webSocketUrl;
+}
+
+async function connect() {
   if (
     typeof window === "undefined" ||
     typeof WebSocket === "undefined" ||
-    listeners.size === 0
+    listeners.size === 0 ||
+    connectInFlight
   ) {
     return;
   }
@@ -153,76 +179,89 @@ function connect() {
   }
 
   clearReconnectTimer();
+  connectInFlight = true;
+  const generation = ++connectGeneration;
 
-  const target = new WebSocket(buildRealtimeUrl());
-  socket = target;
+  try {
+    const webSocketUrl = await requestRealtimeTicket();
 
-  target.onopen = () => {
-    const wasReconnect = everOpened;
-
-    everOpened = true;
-    reconnectAttempt = 0;
-    startHeartbeat(target);
-
-    // After a real network reconnect, force one data reconciliation.
-    // This closes the gap for events that may have happened while offline.
-    if (wasReconnect) {
-      emit({
-        type: "habat.changed",
-        topic: "all",
-        action: "reconnected",
-        revision: createClientId(),
-        at: new Date().toISOString(),
-        sourceClientId: null,
-      });
-    }
-  };
-
-  target.onmessage = message => {
-    let payload: unknown;
-
-    try {
-      payload = JSON.parse(String(message.data || ""));
-    } catch {
+    if (listeners.size === 0 || generation !== connectGeneration) {
       return;
     }
 
-    if (
-      !payload ||
-      typeof payload !== "object" ||
-      (payload as { type?: unknown }).type !== "habat.changed"
-    ) {
-      return;
-    }
+    const target = new WebSocket(webSocketUrl);
+    socket = target;
 
-    const event = payload as HabatRealtimeEvent;
+    target.onopen = () => {
+      const wasReconnect = everOpened;
 
-    if (
-      event.sourceClientId &&
-      event.sourceClientId === getHabatRealtimeClientId()
-    ) {
-      return;
-    }
+      everOpened = true;
+      reconnectAttempt = 0;
+      startHeartbeat(target);
 
-    emit(event);
-  };
+      if (wasReconnect) {
+        emit({
+          type: "habat.changed",
+          topic: "all",
+          action: "reconnected",
+          revision: createClientId(),
+          at: new Date().toISOString(),
+          sourceClientId: null,
+        });
+      }
+    };
 
-  target.onclose = () => {
-    if (socket === target) {
-      socket = null;
-    }
+    target.onmessage = message => {
+      let payload: unknown;
 
-    clearHeartbeatTimer();
+      try {
+        payload = JSON.parse(String(message.data || ""));
+      } catch {
+        return;
+      }
+
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        (payload as { type?: unknown }).type !== "habat.changed"
+      ) {
+        return;
+      }
+
+      const event = payload as HabatRealtimeEvent;
+
+      if (
+        event.sourceClientId &&
+        event.sourceClientId === getHabatRealtimeClientId()
+      ) {
+        return;
+      }
+
+      emit(event);
+    };
+
+    target.onclose = () => {
+      if (socket === target) {
+        socket = null;
+      }
+
+      clearHeartbeatTimer();
+      scheduleReconnect();
+    };
+
+    target.onerror = () => {
+      try {
+        target.close();
+      } catch {
+        // Socket is already closed.
+      }
+    };
+  } catch (error) {
+    console.warn("[habat-realtime] connection bootstrap failed", error);
     scheduleReconnect();
-  };
-
-  target.onerror = () => {
-    try {
-      target.close();
-    } catch {
-      // Socket is already closed.
-    }
-  };
+  } finally {
+    connectInFlight = false;
+  }
 }
 
 function attachNetworkListeners() {
@@ -235,11 +274,13 @@ function attachNetworkListeners() {
 
   networkListenersAttached = true;
 
-  window.addEventListener("online", connect);
+  window.addEventListener("online", () => {
+    void connect();
+  });
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      connect();
+      void connect();
     }
   });
 }
@@ -250,7 +291,7 @@ export function subscribeHabatRealtime(
   listeners.add(listener);
 
   attachNetworkListeners();
-  connect();
+  void connect();
 
   return () => {
     listeners.delete(listener);
@@ -263,6 +304,7 @@ export function subscribeHabatRealtime(
     clearHeartbeatTimer();
     reconnectAttempt = 0;
     everOpened = false;
+    connectGeneration += 1;
 
     if (socket) {
       const current = socket;
@@ -326,7 +368,6 @@ export function useHabatRealtimeRefresh(
         window.clearTimeout(timer);
       }
 
-      // Coalesce mutation bursts into one refresh without polling.
       timer = window.setTimeout(() => {
         timer = null;
         void runRefresh();

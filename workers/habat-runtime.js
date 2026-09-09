@@ -11,6 +11,7 @@ import {
 } from "./habat-native-auth.js";
 import {
   handleHabatRealtimeRequest,
+  handleHabatRealtimeTicketRequest,
   publishHabatRealtimeMutation,
 } from "./habat-realtime.js";
 
@@ -57,6 +58,10 @@ export async function handleHabatRequest(args) {
     ...args,
     resolveRequesterContext: resolveCachedRequester,
   };
+
+  if (pathname === "/attendance/habat/realtime/ticket") {
+    return handleHabatRealtimeTicketRequest(habatArgs);
+  }
 
   if (pathname === "/attendance/habat/realtime") {
     return handleHabatRealtimeRequest(habatArgs);

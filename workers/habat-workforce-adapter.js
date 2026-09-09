@@ -88,11 +88,49 @@ export async function handleHabatWorkforceRequest({
 }
 
 async function resolveEdgePrincipal(db, requester) {
+  const accessId = clean(requester?.accessId);
   const uid = clean(requester?.uid);
   const email = clean(requester?.email).toLowerCase();
   const runtimeRole = clean(requester?.runtime?.role).toLowerCase();
 
-  if (runtimeRole === "owner") {
+  let row = null;
+
+  if (accessId) {
+    row = await db
+      .prepare(
+        `SELECT id, uid, email, display_name, access_level, is_active
+           FROM habat_attendance_access
+          WHERE id = ? AND is_active = 1
+          LIMIT 1`
+      )
+      .bind(accessId)
+      .first();
+  } else if (uid || email) {
+    row = await db
+      .prepare(
+        `SELECT id, uid, email, display_name, access_level, is_active
+           FROM habat_attendance_access
+          WHERE is_active = 1
+            AND ((uid IS NOT NULL AND uid = ?) OR lower(email) = ?)
+          ORDER BY CASE WHEN uid = ? THEN 0 ELSE 1 END, created_at ASC
+          LIMIT 1`
+      )
+      .bind(uid, email, uid)
+      .first();
+  }
+
+  if (row) {
+    return {
+      authenticated: true,
+      uid: clean(row.uid) || uid || null,
+      email: clean(row.email).toLowerCase() || email || null,
+      displayName: clean(row.display_name) || readRequesterName(requester) || email,
+      canManage: clean(row.access_level) === "manager",
+      sourceEmployeeId: clean(row.id) || null,
+    };
+  }
+
+  if (!accessId && runtimeRole === "owner") {
     return {
       authenticated: true,
       uid: uid || null,
@@ -103,30 +141,7 @@ async function resolveEdgePrincipal(db, requester) {
     };
   }
 
-  if (!uid && !email) return { authenticated: false, canManage: false };
-
-  const row = await db
-    .prepare(
-      `SELECT id, uid, email, display_name, access_level, is_active
-         FROM habat_attendance_access
-        WHERE is_active = 1
-          AND ((uid IS NOT NULL AND uid = ?) OR lower(email) = ?)
-        ORDER BY CASE WHEN uid = ? THEN 0 ELSE 1 END, created_at ASC
-        LIMIT 1`
-    )
-    .bind(uid, email, uid)
-    .first();
-
-  if (!row) return { authenticated: false, canManage: false };
-
-  return {
-    authenticated: true,
-    uid: uid || clean(row.uid) || null,
-    email: clean(row.email).toLowerCase() || email || null,
-    displayName: clean(row.display_name) || readRequesterName(requester) || email,
-    canManage: clean(row.access_level) === "manager",
-    sourceEmployeeId: clean(row.id) || null,
-  };
+  return { authenticated: false, canManage: false };
 }
 
 async function listLegacyEmployees(db) {

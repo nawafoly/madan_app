@@ -104,6 +104,81 @@ function unavailable() {
   );
 }
 
+
+export async function handleHabatRealtimeTicketRequest({
+  request,
+  resolveRequesterContext,
+}) {
+  if (request.method !== "POST") {
+    return Response.json(
+      { ok: false, message: "method_not_allowed" },
+      { status: 405, headers: { Allow: "POST", "Cache-Control": "no-store" } }
+    );
+  }
+
+  if (typeof resolveRequesterContext !== "function") {
+    return unavailable();
+  }
+
+  const requester = await resolveRequesterContext(request);
+
+  if (!requester?.ok) {
+    return (
+      requester?.response ||
+      Response.json(
+        { ok: false, message: "habat_session_required" },
+        { status: 401, headers: { "Cache-Control": "no-store" } }
+      )
+    );
+  }
+
+  if (requester.runtime?.isActive === false) {
+    return Response.json(
+      { ok: false, message: "inactive_account" },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  const stub = realtimeStub();
+  if (!stub) return unavailable();
+
+  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, "");
+  const clientId = normalizeHabatRealtimeClientId(
+    request.headers.get("X-Habat-Client-Id")
+  );
+
+  const ticketResponse = await stub.fetch(
+    "https://habat-realtime.internal/ticket",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        accessId: normalizeAccessId(requester.accessId),
+        role: String(requester.accessLevel || "employee"),
+        clientId: clientId || null,
+        expiresAt: Date.now() + 60_000,
+      }),
+    }
+  );
+
+  if (!ticketResponse.ok) {
+    return unavailable();
+  }
+
+  const webSocketUrl = new URL(request.url);
+  webSocketUrl.protocol = webSocketUrl.protocol === "https:" ? "wss:" : "ws:";
+  webSocketUrl.pathname = "/attendance/habat/realtime";
+  webSocketUrl.search = "";
+  webSocketUrl.searchParams.set("ticket", token);
+  if (clientId) webSocketUrl.searchParams.set("clientId", clientId);
+
+  return Response.json(
+    { ok: true, webSocketUrl: webSocketUrl.toString() },
+    { status: 200, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
 export async function handleHabatRealtimeRequest({
   request,
   resolveRequesterContext,
@@ -129,6 +204,16 @@ export async function handleHabatRealtimeRequest({
         headers: { "Cache-Control": "no-store" },
       }
     );
+  }
+
+  const stub = realtimeStub();
+  if (!stub) return unavailable();
+
+  const incomingUrl = new URL(request.url);
+  const ticket = String(incomingUrl.searchParams.get("ticket") || "").trim();
+
+  if (ticket) {
+    return stub.fetch(request);
   }
 
   if (typeof resolveRequesterContext !== "function") {
@@ -160,11 +245,6 @@ export async function handleHabatRealtimeRequest({
     );
   }
 
-  const stub = realtimeStub();
-  if (!stub) return unavailable();
-
-  const incomingUrl = new URL(request.url);
-
   const clientId = normalizeHabatRealtimeClientId(
     incomingUrl.searchParams.get("clientId")
   );
@@ -185,11 +265,7 @@ export async function handleHabatRealtimeRequest({
     headers.set("X-Habat-Realtime-Client-Id", clientId);
   }
 
-  return stub.fetch(
-    new Request(request, {
-      headers,
-    })
-  );
+  return stub.fetch(new Request(request, { headers }));
 }
 
 export async function publishHabatRealtimeMutation({
@@ -282,6 +358,37 @@ export class HabatRealtimeHub {
 
     if (
       url.hostname === "habat-realtime.internal" &&
+      url.pathname === "/ticket"
+    ) {
+      if (request.method !== "POST") {
+        return new Response("method_not_allowed", { status: 405 });
+      }
+
+      let payload;
+      try {
+        payload = await request.json();
+      } catch {
+        return new Response("invalid_json", { status: 400 });
+      }
+
+      const token = String(payload?.token || "").trim();
+      const expiresAt = Number(payload?.expiresAt || 0);
+      if (!token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        return new Response("invalid_ticket", { status: 400 });
+      }
+
+      await this.state.storage.put(`ticket:${token}`, {
+        accessId: normalizeAccessId(payload?.accessId),
+        role: String(payload?.role || "employee").trim(),
+        clientId: normalizeHabatRealtimeClientId(payload?.clientId),
+        expiresAt,
+      });
+
+      return Response.json({ ok: true });
+    }
+
+    if (
+      url.hostname === "habat-realtime.internal" &&
       url.pathname === "/publish"
     ) {
       if (request.method !== "POST") {
@@ -358,17 +465,29 @@ export class HabatRealtimeHub {
       return new Response("websocket_required", { status: 426 });
     }
 
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-
-    const accessId = normalizeAccessId(
+    let accessId = normalizeAccessId(
       request.headers.get("X-Habat-Realtime-Access-Id")
     );
-
-    const role = String(
+    let role = String(
       request.headers.get("X-Habat-Realtime-Role") || "employee"
     ).trim();
 
+    const ticket = String(url.searchParams.get("ticket") || "").trim();
+    if (ticket) {
+      const key = `ticket:${ticket}`;
+      const session = await this.state.storage.get(key);
+      await this.state.storage.delete(key);
+
+      if (!session || Number(session.expiresAt || 0) < Date.now()) {
+        return new Response("realtime_ticket_invalid", { status: 401 });
+      }
+
+      accessId = normalizeAccessId(session.accessId);
+      role = String(session.role || "employee").trim();
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
     const tags = [];
 
     if (role === "manager") {

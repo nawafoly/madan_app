@@ -1,4 +1,7 @@
+import { resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+
 const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
+const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
 const MAX_AUDIT_LIMIT = 300;
 
 export async function handleHabatPortalRequest({
@@ -42,14 +45,28 @@ export async function handleHabatPortalRequest({
 }
 
 async function resolvePortalPrincipal(db, requester) {
+  const accessId = normalizeText(requester?.accessId);
   const uid = normalizeText(requester?.uid);
   const email = normalizeText(requester?.email).toLowerCase();
   const runtimeRole = normalizeText(requester?.runtime?.role).toLowerCase();
   const fallbackName = resolveRequesterDisplayName(requester);
 
-  if (uid || email) {
-    try {
-      const row = await db
+  try {
+    let row = null;
+
+    if (accessId) {
+      row = await db
+        .prepare(
+          `SELECT id, uid, email, display_name, access_level, clock_enabled,
+                  is_active, created_at, updated_at
+           FROM habat_attendance_access
+           WHERE id = ? AND is_active = 1
+           LIMIT 1`
+        )
+        .bind(accessId)
+        .first();
+    } else if (uid || email) {
+      row = await db
         .prepare(
           `SELECT id, uid, email, display_name, access_level, clock_enabled,
                   is_active, created_at, updated_at
@@ -61,48 +78,48 @@ async function resolvePortalPrincipal(db, requester) {
         )
         .bind(uid, email, uid)
         .first();
+    }
 
-      if (row) {
-        if (!normalizeText(row.uid) && uid && normalizeText(row.email).toLowerCase() === email) {
-          try {
-            await db
-              .prepare(
-                `UPDATE habat_attendance_access
-                 SET uid = ?, updated_at = ?
-                 WHERE id = ? AND (uid IS NULL OR trim(uid) = '')`
-              )
-              .bind(uid, nowIso(), row.id)
-              .run();
-          } catch (error) {
-            console.warn("[habat-portal] access uid backfill skipped", error);
-          }
+    if (row) {
+      if (!accessId && !normalizeText(row.uid) && uid && normalizeText(row.email).toLowerCase() === email) {
+        try {
+          await db
+            .prepare(
+              `UPDATE habat_attendance_access
+               SET uid = ?, updated_at = ?
+               WHERE id = ? AND (uid IS NULL OR trim(uid) = '')`
+            )
+            .bind(uid, nowIso(), row.id)
+            .run();
+        } catch (error) {
+          console.warn("[habat-portal] access uid backfill skipped", error);
         }
-
-        const accessLevel = normalizeText(row.access_level) === "manager" ? "manager" : "employee";
-        return {
-          ok: true,
-          bootstrapOwner: false,
-          accessId: normalizeText(row.id),
-          uid,
-          email: normalizeText(row.email).toLowerCase() || email,
-          displayName: normalizeText(row.display_name) || fallbackName || email || "المستخدم",
-          accessLevel,
-          canManage: accessLevel === "manager",
-          canClock: Number(row.clock_enabled) === 1,
-          createdAt: normalizeText(row.created_at) || null,
-          updatedAt: normalizeText(row.updated_at) || null,
-        };
       }
-    } catch (error) {
-      console.error("[habat-portal] principal lookup failed", error);
+
+      const accessLevel = normalizeText(row.access_level) === "manager" ? "manager" : "employee";
       return {
-        ok: false,
-        response: json(500, { ok: false, message: "habat_access_lookup_failed" }),
+        ok: true,
+        bootstrapOwner: false,
+        accessId: normalizeText(row.id),
+        uid: normalizeText(row.uid) || uid || null,
+        email: normalizeText(row.email).toLowerCase() || email,
+        displayName: normalizeText(row.display_name) || fallbackName || email || "المستخدم",
+        accessLevel,
+        canManage: accessLevel === "manager",
+        canClock: Number(row.clock_enabled) === 1,
+        createdAt: normalizeText(row.created_at) || null,
+        updatedAt: normalizeText(row.updated_at) || null,
       };
     }
+  } catch (error) {
+    console.error("[habat-portal] principal lookup failed", error);
+    return {
+      ok: false,
+      response: json(500, { ok: false, message: "habat_access_lookup_failed" }),
+    };
   }
 
-  if (runtimeRole === "owner") {
+  if (!accessId && runtimeRole === "owner") {
     return {
       ok: true,
       bootstrapOwner: true,
@@ -126,6 +143,16 @@ async function getMyPortal(db, requester, principal) {
   const monthStart = `${today.slice(0, 7)}-01`;
 
   try {
+    const workforceLink = principal.accessId
+      ? await db.prepare(
+          `SELECT employee_id
+             FROM workforce_attendance_links
+            WHERE tenant_id = ? AND source_employee_id = ?
+              AND COALESCE(status, 'confirmed') = 'confirmed'
+            LIMIT 1`
+        ).bind(WORKFORCE_TENANT_ID, principal.accessId).first()
+      : null;
+
     const [settings, defaultShift, recordsResult, shiftsResult, assignmentsResult] = await Promise.all([
       getSettings(db),
       getDefaultShift(db),
@@ -177,6 +204,19 @@ async function getMyPortal(db, requester, principal) {
       createdAt: normalizeText(row.created_at) || null,
     }));
 
+    const workforceSchedules = workforceLink?.employee_id
+      ? await resolveWorkforceScheduleRange(
+          db,
+          WORKFORCE_TENANT_ID,
+          workforceLink.employee_id,
+          monthStart,
+          today
+        )
+      : [];
+    const workforceScheduleByDate = new Map(
+      (workforceSchedules || []).map(schedule => [normalizeText(schedule.date), schedule])
+    );
+
     const records = (recordsResult?.results || []).map(mapRecordRow);
     const recordsByDate = new Map(records.map(record => [record.attendanceDate, record]));
     const dates = enumerateDateKeys(monthStart, today);
@@ -200,7 +240,7 @@ async function getMyPortal(db, requester, principal) {
       const record = recordsByDate.get(date) || null;
       const beforeEnrollment = Boolean(enrollmentDate && date < enrollmentDate && !record);
       const eligible = principal.canClock && !beforeEnrollment;
-      const shift = resolveShiftForDate(date, assignments, shiftsById, defaultShift);
+      const shift = resolvePortalShiftForDate(date, workforceScheduleByDate, assignments, shiftsById, defaultShift);
       const workDay = eligible && shift ? isWorkingDay(date, shift) : false;
       const schedule = workDay && shift ? buildScheduleWindow(date, shift) : null;
       const attendanceWindowStarted = date < today || (date === today && schedule && now.getTime() >= schedule.start.getTime());
@@ -247,7 +287,7 @@ async function getMyPortal(db, requester, principal) {
       });
     }
 
-    const currentShift = principal.canClock ? resolveShiftForDate(today, assignments, shiftsById, defaultShift) : null;
+    const currentShift = principal.canClock ? resolvePortalShiftForDate(today, workforceScheduleByDate, assignments, shiftsById, defaultShift) : null;
     const currentAssignment = findAssignmentForDate(today, assignments);
     const attendanceRate = totals.scheduledDays
       ? Math.round((totals.attendedDays / totals.scheduledDays) * 1000) / 10
@@ -374,6 +414,28 @@ async function getDefaultShift(db) {
     .bind(HABAT_DEFAULT_SHIFT_ID)
     .first();
   return row ? mapShiftRow(row) : null;
+}
+
+function resolvePortalShiftForDate(date, workforceScheduleByDate, assignments, shiftsById, defaultShift) {
+  const schedule = workforceScheduleByDate.get(date);
+  if (schedule && schedule.kind !== "unassigned" && schedule.ready) {
+    return mapWorkforceScheduleToPortalShift(schedule, date);
+  }
+  return resolveShiftForDate(date, assignments, shiftsById, defaultShift);
+}
+
+function mapWorkforceScheduleToPortalShift(schedule, date) {
+  const weekday = new Date(`${date}T12:00:00+03:00`).getUTCDay();
+  return {
+    id: normalizeText(schedule.templateId) || `workforce:${normalizeText(schedule.assignmentId)}`,
+    name: normalizeText(schedule.templateName) || (schedule.isWorkingDay ? "Workforce schedule" : "راحة"),
+    startTime: normalizeClock(schedule.startTime),
+    endTime: normalizeClock(schedule.endTime),
+    graceMinutes: numberOrZero(schedule.graceMinutes),
+    earlyLeaveToleranceMinutes: numberOrZero(schedule.earlyLeaveToleranceMinutes),
+    workingDays: schedule.isWorkingDay ? [weekday] : [],
+    isActive: true,
+  };
 }
 
 function resolveShiftForDate(date, assignments, shiftsById, defaultShift) {

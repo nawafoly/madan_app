@@ -61,7 +61,7 @@ import WorkforcePayrollLifecyclePanel from "./WorkforcePayrollLifecyclePanel";
 import WorkforceMonthlyEmployeeReportPanel from "./WorkforceMonthlyEmployeeReportPanel";
 
 import HabatNumberInput from "@/pages/habat/HabatNumberInput";
-import HabatTimeInput from "@/pages/habat/HabatTimeInput";
+import HabatTimeInput, { formatHabatClockTime, formatHabatShiftRange } from "@/pages/habat/HabatTimeInput";
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
   accountEmail?: string | null;
@@ -226,7 +226,11 @@ function dateText(value?: string | null) {
 
 function durationText(item: WorkforceLeave, language: "ar" | "en") {
   if (item.duration_kind === "half_day") return tr(language, "نصف يوم", "Half Day");
-  if (item.duration_kind === "partial") return `${item.partial_start_time || "--"} — ${item.partial_end_time || "--"}`;
+  if (item.duration_kind === "partial") {
+    const start = item.partial_start_time ? formatHabatClockTime(item.partial_start_time) : "--";
+    const end = item.partial_end_time ? formatHabatClockTime(item.partial_end_time) : "--";
+    return `${start} — ${end}`;
+  }
   return item.start_date === item.end_date ? tr(language, "يوم كامل", "Full Day") : `${dateText(item.start_date)} — ${dateText(item.end_date)}`;
 }
 
@@ -258,7 +262,27 @@ function defaultWeekPlan(templateId = ""): WeekPlan {
   };
 }
 
-function scheduleSummary(assignment: AssignmentRow, language: "ar" | "en") {
+function scheduleSummary(
+  assignment: AssignmentRow,
+  templates: WorkforceScheduleTemplate[],
+  language: "ar" | "en"
+) {
+  const templatesById = new Map(templates.map(item => [item.id, item]));
+
+  function describeTemplate(templateId: string) {
+    const template = templatesById.get(templateId);
+    if (template) {
+      return `${template.name} · ${formatHabatShiftRange(template.startTime, template.endTime)}`;
+    }
+
+    if (templateId === assignment.template_id && assignment.start_time && assignment.end_time) {
+      const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+    }
+
+    return language === "ar" ? "عمل" : "Work";
+  }
+
   try {
     const raw = assignment.week_pattern_json
       ? JSON.parse(assignment.week_pattern_json)
@@ -279,18 +303,23 @@ function scheduleSummary(assignment: AssignmentRow, language: "ar" | "en") {
           ? config.templateId
           : assignment.template_id || "";
 
-      return `${language === "ar" ? day.ar : day.en}: ${templateId || (language === "ar" ? "عمل" : "Work")}`;
+      return `${language === "ar" ? day.ar : day.en}: ${describeTemplate(templateId)}`;
     }).filter(Boolean);
 
-    return parts.length
-      ? parts.join(" · ")
-      : language === "ar"
-        ? "جدول أسبوعي"
-        : "Weekly schedule";
+    if (parts.length) return parts.join(" · ");
+
+    if (assignment.start_time && assignment.end_time) {
+      const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+    }
+
+    return language === "ar" ? "جدول أسبوعي" : "Weekly schedule";
   } catch {
-    return language === "ar"
-      ? "جدول أسبوعي"
-      : "Weekly schedule";
+    if (assignment.start_time && assignment.end_time) {
+      const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+    }
+    return language === "ar" ? "جدول أسبوعي" : "Weekly schedule";
   }
 }
 
@@ -689,7 +718,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
                 <TableBody>
                   {assignments.map((item, index) => (
                     <TableRow key={item.id || index}>
-                      <TableCell className="font-bold">{scheduleSummary(item, language)}</TableCell>
+                      <TableCell className="font-bold">{scheduleSummary(item, templates, language)}</TableCell>
                       <TableCell>{dateText(item.effective_from)}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -786,7 +815,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
                             .filter(item => item.isActive)
                             .map(item => (
                               <SelectItem key={item.id} value={item.id}>
-                                {item.name} · {item.startTime} — {item.endTime}
+                                {item.name} · {formatHabatShiftRange(item.startTime, item.endTime)}
                               </SelectItem>
                             ))}
                         </SelectContent>
