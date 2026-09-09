@@ -1,3 +1,5 @@
+import { resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+
 export async function handleWorkforceAttendanceOperationsRequest({
   request,
   url,
@@ -15,7 +17,6 @@ export async function handleWorkforceAttendanceOperationsRequest({
   const employeeId = decodeURIComponent(match[1]);
   await requireEmployeeAccess(db, tenant.id, employeeId, principal);
   const monthKey = validMonth(url.searchParams.get("month") || currentMonthRiyadh());
-  const { fromDate, nextMonth } = monthBounds(monthKey);
 
   const link = await db
     .prepare(`SELECT * FROM workforce_attendance_links
@@ -58,7 +59,9 @@ export async function handleWorkforceAttendanceOperationsRequest({
     return json(501, { ok: false, message: "workforce_attendance_source_unavailable" });
   }
 
-  const [sourceRows, absencesResult] = await Promise.all([
+  const { fromDate, lastDate, nextMonth } = monthBounds(monthKey);
+
+  const [sourceRows, absencesResult, schedules] = await Promise.all([
     sourceAdapter.listAttendanceMonth(clean(link.source_employee_id), monthKey),
     db.prepare(`SELECT * FROM workforce_absences
                  WHERE tenant_id = ? AND employee_id = ?
@@ -66,33 +69,25 @@ export async function handleWorkforceAttendanceOperationsRequest({
                  ORDER BY absence_date ASC`)
       .bind(tenant.id, employeeId, fromDate, nextMonth)
       .all(),
+    resolveWorkforceScheduleRange(db, tenant.id, employeeId, fromDate, lastDate),
   ]);
 
   const absenceByDate = new Map((absencesResult?.results || []).map(row => [clean(row.absence_date), row]));
+  const scheduleByDate = new Map((schedules || []).map(schedule => [clean(schedule.date), schedule]));
   const days = [];
   const seen = new Set();
+  const today = currentDateRiyadh();
 
   for (const raw of Array.isArray(sourceRows) ? sourceRows : []) {
     const date = clean(raw.date || raw.attendanceDate || raw.attendance_date);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < fromDate || date >= nextMonth) continue;
     seen.add(date);
-    const checkInAt = nullable(raw.checkInAt ?? raw.check_in_at);
-    const checkOutAt = nullable(raw.checkOutAt ?? raw.check_out_at);
-    const lateMinutes = nonNegativeInt(raw.lateMinutes ?? raw.late_minutes);
-    const earlyLeaveMinutes = nonNegativeInt(raw.earlyLeaveMinutes ?? raw.early_leave_minutes);
-    const workedMinutes = nullableInt(raw.workedMinutes ?? raw.worked_minutes);
-    const missingPunch = Boolean(checkInAt) !== Boolean(checkOutAt);
+    const resolved = resolveAttendanceOperationDay(raw, scheduleByDate.get(date), today);
     const explicitAbsence = absenceByDate.get(date) || null;
 
     days.push({
       date,
-      checkInAt,
-      checkOutAt,
-      status: clean(raw.status || raw.attendanceStatus || raw.attendance_status) || (checkInAt ? "present" : "unknown"),
-      lateMinutes,
-      earlyLeaveMinutes,
-      workedMinutes,
-      missingPunch,
+      ...resolved,
       explicitAbsence: explicitAbsence ? {
         id: explicitAbsence.id,
         dayPortion: explicitAbsence.day_portion,
@@ -139,6 +134,86 @@ export async function handleWorkforceAttendanceOperationsRequest({
     summary,
     days,
   });
+}
+
+export function resolveAttendanceOperationDay(raw, schedule, today = currentDateRiyadh()) {
+  const date = clean(raw?.date || raw?.attendanceDate || raw?.attendance_date);
+  const checkInAt = nullable(raw?.checkInAt ?? raw?.check_in_at);
+  const checkOutAt = nullable(raw?.checkOutAt ?? raw?.check_out_at);
+  const stored = {
+    checkInAt,
+    checkOutAt,
+    status: clean(raw?.status || raw?.attendanceStatus || raw?.attendance_status) || (checkInAt ? "present" : "unknown"),
+    lateMinutes: nonNegativeInt(raw?.lateMinutes ?? raw?.late_minutes),
+    earlyLeaveMinutes: nonNegativeInt(raw?.earlyLeaveMinutes ?? raw?.early_leave_minutes),
+    workedMinutes: nullableInt(raw?.workedMinutes ?? raw?.worked_minutes),
+    missingPunch: Boolean(checkInAt) !== Boolean(checkOutAt),
+  };
+
+  if (!checkInAt) return stored;
+
+  const historicalComplete = date && date < today && Boolean(checkInAt && checkOutAt);
+  if (historicalComplete || !schedule?.ready || !schedule?.isWorkingDay) {
+    return stored;
+  }
+
+  const metrics = calculateAttendanceMetrics({
+    date,
+    checkInAt,
+    checkOutAt,
+    schedule,
+  });
+
+  return {
+    ...stored,
+    status: metrics.status,
+    lateMinutes: metrics.lateMinutes,
+    earlyLeaveMinutes: metrics.earlyLeaveMinutes,
+    workedMinutes: metrics.workedMinutes,
+  };
+}
+
+function calculateAttendanceMetrics({ date, checkInAt, checkOutAt, schedule }) {
+  const checkIn = checkInAt ? new Date(checkInAt) : null;
+  const checkOut = checkOutAt ? new Date(checkOutAt) : null;
+  const window = buildScheduleWindow(date, schedule);
+  const grace = Number(schedule?.graceMinutes || 0);
+  const earlyTolerance = Number(schedule?.earlyLeaveToleranceMinutes || 0);
+
+  const rawLateMinutes = checkIn && window
+    ? Math.max(0, Math.floor((checkIn.getTime() - window.start.getTime()) / 60000))
+    : 0;
+  const rawEarlyLeaveMinutes = checkOut && window
+    ? Math.max(0, Math.floor((window.end.getTime() - checkOut.getTime()) / 60000))
+    : 0;
+  const lateMinutes = rawLateMinutes > grace ? rawLateMinutes : 0;
+  const earlyLeaveMinutes = rawEarlyLeaveMinutes > earlyTolerance ? rawEarlyLeaveMinutes : 0;
+  const workedMinutes = checkIn && checkOut
+    ? Math.max(0, Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000))
+    : null;
+
+  return {
+    lateMinutes,
+    earlyLeaveMinutes,
+    workedMinutes,
+    status: lateMinutes && earlyLeaveMinutes
+      ? "late_early_leave"
+      : lateMinutes
+        ? "late"
+        : earlyLeaveMinutes
+          ? "early_leave"
+          : "present",
+  };
+}
+
+function buildScheduleWindow(date, schedule) {
+  const startTime = clean(schedule?.startTime);
+  const endTime = clean(schedule?.endTime);
+  if (!date || !isTime(startTime) || !isTime(endTime)) return null;
+  const start = new Date(`${date}T${startTime}:00+03:00`);
+  let end = new Date(`${date}T${endTime}:00+03:00`);
+  if (end.getTime() <= start.getTime()) end = new Date(end.getTime() + 86400000);
+  return { start, end };
 }
 
 function summarize(days) {
@@ -189,9 +264,11 @@ function validMonth(value) {
 
 function monthBounds(monthKey) {
   const [year, month] = monthKey.split("-").map(Number);
+  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + "-01";
   return {
     fromDate: `${monthKey}-01`,
-    nextMonth: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + "-01",
+    lastDate: new Date(Date.UTC(year, month, 0, 12)).toISOString().slice(0, 10),
+    nextMonth,
   };
 }
 
@@ -200,6 +277,15 @@ function currentMonthRiyadh() {
     timeZone: "Asia/Riyadh",
     year: "numeric",
     month: "2-digit",
+  }).format(new Date());
+}
+
+function currentDateRiyadh() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).format(new Date());
 }
 
@@ -248,4 +334,8 @@ function nullableInt(value) {
   if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? Math.round(number) : null;
+}
+
+function isTime(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(clean(value));
 }

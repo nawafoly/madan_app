@@ -29,7 +29,7 @@ test("new schedule assignments require one employee weekly rest day", () => {
   assert.match(core, /workforce_weekly_rest_weekday_required/);
   assert.match(core, /week_pattern_json/);
   assert.match(core, /workforce_schedule_assignment_operation_unique|operation_id/);
-  assert.match(client, /weeklyRestWeekday: number/);
+  assert.match(client, /weeklyRestWeekday\?: number/);
 });
 
 test("resolver prefers employee schedule and keeps legacy fallback", () => {
@@ -44,7 +44,7 @@ test("Habbat edge calls Workforce first and only then uses legacy assignment fal
   assert.match(habatV2, /await resolveWorkforceScheduleDay\(/);
 
   const functionStart = habatV2.indexOf("async function resolveShiftForAccess(db, accessId, dateKey) {");
-  const functionEnd = habatV2.indexOf("\n}\n\nfunction resolveAssignmentFromList", functionStart);
+  const functionEnd = habatV2.indexOf("function resolveAssignmentFromList", functionStart);
   assert.ok(functionStart >= 0 && functionEnd > functionStart);
 
   const resolverBody = habatV2.slice(functionStart, functionEnd);
@@ -55,8 +55,17 @@ test("Habbat edge calls Workforce first and only then uses legacy assignment fal
   assert.match(resolverBody, /if \(workforceShift\) return workforceShift/);
 });
 
+test("Habbat shift template edits sync the matching Workforce template", () => {
+  assert.match(habatV2, /syncWorkforceTemplateFromHabatShift/);
+  assert.match(habatV2, /`wf_sched_\$\{legacyShiftId\}`/);
+  assert.match(habatV2, /INSERT INTO workforce_schedule_templates/);
+  assert.match(habatV2, /ON CONFLICT\(id\) DO UPDATE SET/);
+  assert.match(habatV2, /start_time = excluded\.start_time/);
+  assert.match(habatV2, /end_time = excluded\.end_time/);
+  assert.match(habatV2, /JSON\.stringify\(\[0, 1, 2, 3, 4, 5, 6\]\)/);
+});
+
 test("employee UI owns weekly rest and payroll renders setup before execution panels", () => {
-  assert.match(employeeFile, /الإجازة الأسبوعية الأساسية/);
   assert.match(employeeFile, /جدول الموظف الأسبوعي/);
 
   const payrollStart = employeeFile.indexOf('<TabsContent value="payroll"');

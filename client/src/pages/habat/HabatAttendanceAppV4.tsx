@@ -31,6 +31,7 @@ import {
   type ReactNode,
 } from "react";
 import HabatDatePicker from "./HabatDatePicker";
+import HabatTimeInput, { formatHabatShiftRange } from "./HabatTimeInput";
 import { habatLogin, habatLogout, habatSession, habatChangePassword } from "./habatAuthClient";
 import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
 import { cn } from "@/lib/utils";
@@ -432,7 +433,7 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
 
       <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الشفت", "Shift")}</p><p className="mt-1 text-sm font-black sm:text-base">{context.shift?.name || "غير محدد"}</p></div>
-        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الدوام", "Schedule")}</p><p dir="ltr" className="mt-1 text-start text-sm font-black sm:text-base">{context.shift ? `${context.shift.startTime} - ${context.shift.endTime}` : "--"}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الدوام", "Schedule")}</p><p dir="ltr" className="mt-1 text-start text-sm font-black sm:text-base">{context.shift ? formatHabatShiftRange(context.shift.startTime, context.shift.endTime) : "--"}</p></div>
         <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الموقع", "Location")}</p><p className="mt-1 text-start text-sm font-black sm:text-base">{context.settings.locationRequired ? <span dir="ltr">{`${context.settings.radiusM} m`}</span> : tr(language, "غير إلزامي", "Not Required")}</p></div>
       </div>
 
@@ -515,8 +516,8 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
           <DialogDescription>{record ? `${record.displayName || record.accountEmail} · ${formatDate(record.attendanceDate)}` : ""}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><Input type="time" step={60} value={checkInAt} onChange={event => setCheckInAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" required /></div>
-          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><Input type="time" step={60} value={checkOutAt} onChange={event => setCheckOutAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatTimeInput value={checkOutAt} onChange={setCheckOutAt} className="h-12 rounded-2xl" /></div>
           <div className="space-y-2"><Label>{tr(language, "سبب التعديل", "Reason for Edit")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="سبب واضح للتعديل" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
@@ -580,8 +581,8 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
       <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
         <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}><DialogTitle>{tr(language, "إضافة بصمة يدوية", "Add Manual Attendance")}</DialogTitle><DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription></DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><Input type="time" step={60} value={checkInAt} onChange={event => setCheckInAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" required /></div>
-          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><Input type="time" step={60} value={checkOutAt} onChange={event => setCheckOutAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatTimeInput value={checkOutAt} onChange={setCheckOutAt} className="h-12 rounded-2xl" /></div>
           <div className="space-y-2"><Label>{tr(language, "سبب الإضافة", "Reason for Addition")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
@@ -730,7 +731,7 @@ function DayDetails({ day }: { day: MonthDay | null }) {
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"><h4 className="font-black">{tr(language, "لم يتم تسجيل حضور لهذا اليوم حتى الآن", "No attendance has been recorded for this day yet")}</h4><p className="mt-1 text-sm text-slate-500">{tr(language, "لا توجد بيانات حضور فعلية لليوم المحدد.", "There is no actual attendance data for the selected day.")}</p></div>
       ) : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label={tr(language, "الدوام المعتمد", "Scheduled Shift")} value={day.shift ? `${day.shift.startTime} — ${day.shift.endTime}` : "--"} />
+        <Metric label={tr(language, "الدوام المعتمد", "Scheduled Shift")} value={day.shift ? formatHabatShiftRange(day.shift.startTime, day.shift.endTime) : "--"} />
         <Metric label={tr(language, "أول حضور", "First Clock In")} value={formatTime(day.record?.checkInAt)} />
         <Metric label={tr(language, "آخر انصراف", "Last Clock Out")} value={formatTime(day.record?.checkOutAt)} />
         <Metric label={tr(language, "مدة العمل الفعلية", "Actual Worked Time")} value={formatMinutes(day.record?.workedMinutes, language)} />

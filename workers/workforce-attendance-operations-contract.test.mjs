@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
+import { resolveAttendanceOperationDay } from "./workforce-attendance-operations.js";
+
 const service = fs.readFileSync(new URL("./workforce-attendance-operations.js", import.meta.url), "utf8");
 const ui = fs.readFileSync(new URL("../client/src/features/workforce/WorkforceAttendanceOperationsPanel.tsx", import.meta.url), "utf8");
 const integration = fs.readFileSync(new URL("../scripts/integrate-workforce-attendance-operations.mjs", import.meta.url), "utf8");
@@ -32,6 +34,67 @@ test("attendance operations expose lateness, early leave, missing punch, and exp
     "missingPunchDays",
     "explicitAbsenceDays",
   ]) assert.ok(service.includes(required), required);
+});
+
+test("attendance operations recompute open/current rows from resolved Workforce schedule", () => {
+  const row = resolveAttendanceOperationDay(
+    {
+      date: "2026-09-09",
+      checkInAt: "2026-09-09T12:00:00.000Z", // 15:00 Riyadh
+      checkOutAt: "2026-09-09T20:30:00.000Z", // 23:30 Riyadh
+      lateMinutes: 420,
+      earlyLeaveMinutes: 0,
+      status: "late",
+    },
+    {
+      ready: true,
+      isWorkingDay: true,
+      startTime: "15:00",
+      endTime: "23:59",
+      graceMinutes: 10,
+      earlyLeaveToleranceMinutes: 0,
+    },
+    "2026-09-09"
+  );
+
+  assert.equal(row.status, "early_leave");
+  assert.equal(row.lateMinutes, 0);
+  assert.equal(row.earlyLeaveMinutes, 29);
+});
+
+test("attendance operations preserve completed historical attendance snapshots", () => {
+  const row = resolveAttendanceOperationDay(
+    {
+      date: "2026-09-08",
+      checkInAt: "2026-09-08T06:30:00.000Z",
+      checkOutAt: "2026-09-08T14:00:00.000Z",
+      lateMinutes: 30,
+      earlyLeaveMinutes: 0,
+      workedMinutes: 450,
+      status: "late",
+    },
+    {
+      ready: true,
+      isWorkingDay: true,
+      startTime: "15:00",
+      endTime: "23:59",
+      graceMinutes: 10,
+      earlyLeaveToleranceMinutes: 0,
+    },
+    "2026-09-09"
+  );
+
+  assert.equal(row.status, "late");
+  assert.equal(row.lateMinutes, 30);
+  assert.equal(row.earlyLeaveMinutes, 0);
+  assert.equal(row.workedMinutes, 450);
+});
+
+test("attendance operations resolve schedule templates before calculating payroll-facing metrics", () => {
+  assert.match(service, /resolveWorkforceScheduleRange/);
+  assert.match(service, /scheduleByDate/);
+  assert.match(service, /resolveAttendanceOperationDay/);
+  assert.match(service, /historicalComplete/);
 });
 
 test("attendance operations use bounded month ranges instead of wildcard month scans", () => {

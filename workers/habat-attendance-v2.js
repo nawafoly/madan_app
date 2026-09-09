@@ -663,6 +663,7 @@ async function createShift(db, request, requester) {
     ).run();
 
     const row = await getShiftById(db, id);
+    await syncWorkforceTemplateFromHabatShift(db, row);
     await writeAudit(db, requester, "create_shift", "habat_attendance_shift", id, null, row);
     return json(200, { ok: true, shift: mapShift(row) });
   } catch (error) {
@@ -712,6 +713,7 @@ async function updateShift(db, request, requester, id) {
     ).run();
 
     const next = await getShiftById(db, id);
+    await syncWorkforceTemplateFromHabatShift(db, next);
     await writeAudit(db, requester, "update_shift", "habat_attendance_shift", id, current, next);
     return json(200, { ok: true, shift: mapShift(next) });
   } catch (error) {
@@ -732,6 +734,7 @@ async function deactivateShift(db, requester, id) {
       `UPDATE habat_attendance_shifts SET is_active = 0, updated_at = ? WHERE id = ?`
     ).bind(nowIso(), id).run();
     const next = await getShiftById(db, id);
+    await syncWorkforceTemplateFromHabatShift(db, next);
     await writeAudit(db, requester, "deactivate_shift", "habat_attendance_shift", id, current, next);
     return json(200, { ok: true, shift: mapShift(next) });
   } catch (error) {
@@ -1192,6 +1195,45 @@ function makeWorkforceShiftFromResolved(schedule, dateKey) {
     is_active: 1,
     schedule_source: normalizeText(schedule?.source) || "workforce_schedule",
   };
+}
+
+async function syncWorkforceTemplateFromHabatShift(db, shift) {
+  const legacyShiftId = normalizeText(shift?.id);
+  if (!legacyShiftId) return;
+
+  const workforceTemplateId = `wf_sched_${legacyShiftId}`;
+  const now = nowIso();
+  try {
+    await db.prepare(
+      `INSERT INTO workforce_schedule_templates (
+         id, tenant_id, name, start_time, end_time, grace_minutes,
+         early_leave_tolerance_minutes, working_days_json, is_active,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         start_time = excluded.start_time,
+         end_time = excluded.end_time,
+         grace_minutes = excluded.grace_minutes,
+         early_leave_tolerance_minutes = excluded.early_leave_tolerance_minutes,
+         is_active = excluded.is_active,
+         updated_at = excluded.updated_at`
+    ).bind(
+      workforceTemplateId,
+      WORKFORCE_TENANT_ID,
+      normalizeText(shift.name),
+      normalizeTime(shift.start_time),
+      normalizeTime(shift.end_time),
+      Number(shift.grace_minutes || 0),
+      Number(shift.early_leave_tolerance_minutes || 0),
+      JSON.stringify([0, 1, 2, 3, 4, 5, 6]),
+      Number(shift.is_active) === 1 ? 1 : 0,
+      normalizeText(shift.created_at) || now,
+      now
+    ).run();
+  } catch (error) {
+    console.warn("[habat-v2] workforce schedule template sync skipped", error);
+  }
 }
 
 function weekdayFromDateKey(dateKey) {

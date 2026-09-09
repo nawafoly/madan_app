@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import HabatDatePicker from "./HabatDatePicker";
 import HabatNumberInput from "@/pages/habat/HabatNumberInput";
-import HabatTimeInput from "@/pages/habat/HabatTimeInput";
+import HabatTimeInput, { formatHabatShiftRange } from "@/pages/habat/HabatTimeInput";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import {
@@ -179,7 +179,7 @@ export function DashboardPage() {
                     </td>
                     <td className="px-3 py-3">
                       {employee.shift
-                        ? `${employee.shift.startTime} - ${employee.shift.endTime}`
+                        ? formatHabatShiftRange(employee.shift.startTime, employee.shift.endTime)
                         : "—"}
                     </td>
                     <td className="px-3 py-3">{formatTime(employee.record?.checkInAt)}</td>
@@ -412,7 +412,7 @@ export function EmployeesPage({ onDataChanged }: PageProps) {
                   >
                     {shifts.filter(shift => shift.isActive).map(shift => (
                       <option key={shift.id} value={shift.id}>
-                        {shift.name} · {shift.startTime}-{shift.endTime}
+                        {shift.name} · {formatHabatShiftRange(shift.startTime, shift.endTime)}
                       </option>
                     ))}
                   </select>
@@ -597,7 +597,7 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
                 <div>
                   <p className="font-black">{shift.name}</p>
                   <p className="mt-1 text-sm text-slate-500">
-                    {shift.startTime} → {shift.endTime} · {tr(language, "سماح", "Grace")} {shift.graceMinutes} {tr(language, "د", "min")}
+                    {formatHabatShiftRange(shift.startTime, shift.endTime)} · {tr(language, "سماح", "Grace")} {shift.graceMinutes} {tr(language, "د", "min")}
                   </p>
                 </div>
                 <div className="flex gap-1">
