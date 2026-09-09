@@ -62,6 +62,7 @@ import WorkforceMonthlyEmployeeReportPanel from "./WorkforceMonthlyEmployeeRepor
 
 import HabatNumberInput from "@/pages/habat/HabatNumberInput";
 import HabatTimeInput, { formatHabatClockTime, formatHabatShiftRange } from "@/pages/habat/HabatTimeInput";
+import { useHabatRealtimeRefresh } from "@/pages/habat/habatRealtimeClient";
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
   accountEmail?: string | null;
@@ -262,6 +263,41 @@ function defaultWeekPlan(templateId = ""): WeekPlan {
   };
 }
 
+function todayRiyadhDateKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function weekPlanFromAssignment(assignment?: AssignmentRow | null): WeekPlan | null {
+  if (!assignment?.week_pattern_json) return null;
+  try {
+    const parsed = JSON.parse(assignment.week_pattern_json);
+    const days = parsed?.days;
+    if (!days || typeof days !== "object") return null;
+
+    const next = {} as WeekPlan;
+    for (const day of WEEK_DAYS) {
+      const raw = days[String(day.value)];
+      if (raw?.kind === "rest") {
+        next[String(day.value)] = { kind: "rest" };
+      } else if (raw?.kind === "work") {
+        next[String(day.value)] = {
+          kind: "work",
+          templateId: String(raw.templateId || assignment.template_id || ""),
+        };
+      }
+    }
+
+    return Object.keys(next).length ? next : null;
+  } catch {
+    return null;
+  }
+}
+
 function scheduleSummary(
   assignment: AssignmentRow,
   templates: WorkforceScheduleTemplate[],
@@ -351,7 +387,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
   const [absenceTreatment, setAbsenceTreatment] = useState<WorkforceAbsence["payroll_treatment"]>("attendance_policy");
   const [absenceReason, setAbsenceReason] = useState("");
 
-  const [assignmentFrom, setAssignmentFrom] = useState("");
+  const [assignmentFrom, setAssignmentFrom] = useState(() => todayRiyadhDateKey());
   const [assignmentReason, setAssignmentReason] = useState("");
   const [weekPlan, setWeekPlan] = useState<WeekPlan>(() => defaultWeekPlan());
 
@@ -383,7 +419,12 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
       setLeaves(leavePayload.leaves || []);
       setAbsences(absencePayload.absences || []);
       setTemplates(templatePayload.templates || []);
-      setAssignments((assignmentPayload.assignments || []) as AssignmentRow[]);
+      const nextAssignments = (assignmentPayload.assignments || []) as AssignmentRow[];
+      setAssignments(nextAssignments);
+      const savedWeekPlan = weekPlanFromAssignment(nextAssignments[0]);
+      if (savedWeekPlan) {
+        setWeekPlan(savedWeekPlan);
+      }
       setBasic({
         displayName: employeePayload.employee.displayName || "",
         employeeNumber: employeePayload.employee.employeeNumber || "",
@@ -433,6 +474,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
   }, [employeeId, resolveEmployeeId]);
 
   useEffect(() => { void load(); }, [identity.accountEmail, identity.accountUid]);
+  useHabatRealtimeRefresh(load);
 
   const totalMonthly = useMemo(() => {
     if (!file?.payrollSettings) return 0;
@@ -537,7 +579,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
 
   async function createAssignment(event: FormEvent) {
     event.preventDefault();
-    if (!employeeId || saving || !assignmentFrom) return;
+    if (!employeeId || saving) return;
 
     const workingDays = Object.values(weekPlan).filter(item => item.kind === "work");
     const invalidWorkingDay = workingDays.some(item => item.kind === "work" && !item.templateId);
@@ -558,13 +600,13 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
 
     try {
       await WorkforceService.createScheduleAssignment(employeeId, {
-        effectiveFrom: assignmentFrom,
+        effectiveFrom: assignmentFrom || todayRiyadhDateKey(),
         weekPattern: { days: weekPlan },
         reason: assignmentReason || null,
         operationId: crypto.randomUUID(),
       });
 
-      setAssignmentFrom("");
+      setAssignmentFrom(todayRiyadhDateKey());
       setAssignmentReason("");
       setMessage(tr(language, "تم حفظ جدول الموظف الأسبوعي.", "Employee weekly schedule saved."));
       await load();
@@ -853,7 +895,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
 
             <Button
               type="submit"
-              disabled={saving || !assignmentFrom}
+              disabled={saving}
               className="rounded-xl bg-black"
             >
               <Plus className="h-4 w-4" />

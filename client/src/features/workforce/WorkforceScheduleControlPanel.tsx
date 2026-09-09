@@ -14,7 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { workforceApi, type WorkforceScheduleTemplate } from "./workforceClient";
 
 import HabatDatePicker from "@/pages/habat/HabatDatePicker";
-import HabatTimeInput from "@/pages/habat/HabatTimeInput";
+import HabatTimeInput, { formatHabatShiftRange } from "@/pages/habat/HabatTimeInput";
+import { useHabatRealtimeRefresh } from "@/pages/habat/habatRealtimeClient";
 type ScheduleExceptionType = "off" | "custom_shift" | "alternate_shift" | "weekly_rest_work";
 
 type ScheduleException = {
@@ -132,6 +133,7 @@ export default function WorkforceScheduleControlPanel({ employeeId, templates }:
   }, [employeeId]);
 
   useEffect(() => { void load(); }, [load]);
+  useHabatRealtimeRefresh(load);
 
   async function resolveDate() {
     setLoading(true); setError(""); setMessage("");

@@ -148,7 +148,7 @@ test("Habat V4 actually subscribes to realtime", () => {
 
   assert.match(
     v4,
-    /import \{ useHabatRealtimeRefresh \} from "\.\/habatRealtimeClient";/
+    /import \{[^}]*useHabatRealtimeRefresh[^}]*\} from "\.\/habatRealtimeClient";/
   );
 
   assert.match(

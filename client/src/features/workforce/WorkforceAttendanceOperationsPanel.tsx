@@ -18,6 +18,7 @@ import {
 import { workforceApi, WorkforceApiError } from "./workforceClient";
 
 import HabatDatePicker from "@/pages/habat/HabatDatePicker";
+import { useHabatRealtimeRefresh } from "@/pages/habat/habatRealtimeClient";
 type AttendanceDay = {
   date: string;
   checkInAt: string | null;
@@ -88,7 +89,7 @@ function timeText(value: string | null) {
   if (!value) return "—";
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: false }).format(parsed);
+    return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: true }).format(parsed);
   }
   return value.slice(0, 5) || value;
 }
@@ -125,6 +126,7 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
   }, [employeeId, month]);
 
   useEffect(() => { void load(); }, [load]);
+  useHabatRealtimeRefresh(load);
 
   const readinessLabel = useMemo(() => {
     const status = payload?.readiness.status;

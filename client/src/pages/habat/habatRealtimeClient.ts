@@ -160,11 +160,11 @@ async function requestRealtimeTicket(): Promise<string> {
   return payload.webSocketUrl;
 }
 
-async function connect() {
+async function connect(force = false) {
   if (
     typeof window === "undefined" ||
     typeof WebSocket === "undefined" ||
-    listeners.size === 0 ||
+    (!force && listeners.size === 0) ||
     connectInFlight
   ) {
     return;
@@ -230,13 +230,6 @@ async function connect() {
 
       const event = payload as HabatRealtimeEvent;
 
-      if (
-        event.sourceClientId &&
-        event.sourceClientId === getHabatRealtimeClientId()
-      ) {
-        return;
-      }
-
       emit(event);
     };
 
@@ -283,6 +276,12 @@ function attachNetworkListeners() {
       void connect();
     }
   });
+}
+
+export function ensureHabatRealtimeConnection() {
+  if (typeof window === "undefined") return;
+  attachNetworkListeners();
+  void connect(true);
 }
 
 export function subscribeHabatRealtime(

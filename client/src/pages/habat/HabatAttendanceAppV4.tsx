@@ -33,7 +33,7 @@ import {
 import HabatDatePicker from "./HabatDatePicker";
 import HabatTimeInput, { formatHabatShiftRange } from "./HabatTimeInput";
 import { habatLogin, habatLogout, habatSession, habatChangePassword } from "./habatAuthClient";
-import { useHabatRealtimeRefresh } from "./habatRealtimeClient";
+import { ensureHabatRealtimeConnection, useHabatRealtimeRefresh } from "./habatRealtimeClient";
 import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -1403,7 +1403,9 @@ async function loadContext(language: "ar" | "en"): Promise<AccessState> {
   try {
     const session = await habatSession();
     if (session.mustChangePassword) return { status: "change-password" };
-    return { status: "ready", context: await habatApi<HabatContext>("v2/context") };
+    const context = await habatApi<HabatContext>("v2/context");
+    ensureHabatRealtimeConnection();
+    return { status: "ready", context };
   } catch (error) {
     if ((error as { status?: number })?.status === 401) {
       return { status: "signed-out" };
