@@ -119,67 +119,13 @@ export async function handleHabatAttendanceV2Request({
 }
 
 async function resolvePrincipal(db, requester) {
+  const accessId = normalizeText(requester?.accessId);
   const uid = normalizeText(requester?.uid);
   const email = normalizeText(requester?.email).toLowerCase();
   const runtimeRole = normalizeText(requester?.runtime?.role).toLowerCase();
   const fallbackName = resolveRequesterDisplayName(requester);
 
-  if (uid || email) {
-    try {
-      const row = await db
-        .prepare(
-          `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active
-           FROM habat_attendance_access
-           WHERE is_active = 1
-             AND ((uid IS NOT NULL AND uid = ?) OR lower(email) = ?)
-           ORDER BY CASE WHEN uid = ? THEN 0 ELSE 1 END, created_at ASC
-           LIMIT 1`
-        )
-        .bind(uid, email, uid)
-        .first();
-
-      if (row) {
-        if (!normalizeText(row.uid) && uid && normalizeText(row.email).toLowerCase() === email) {
-          try {
-            await db
-              .prepare(
-                `UPDATE habat_attendance_access
-                 SET uid = ?, updated_at = ?
-                 WHERE id = ? AND (uid IS NULL OR trim(uid) = '')`
-              )
-              .bind(uid, nowIso(), row.id)
-              .run();
-          } catch (error) {
-            console.warn("[habat-v2] access uid backfill skipped", error);
-          }
-        }
-
-        const accessLevel = HABAT_ACCESS_LEVELS.has(normalizeText(row.access_level))
-          ? normalizeText(row.access_level)
-          : "employee";
-
-        return {
-          ok: true,
-          bootstrapOwner: false,
-          accessId: normalizeText(row.id),
-          uid,
-          email: normalizeText(row.email).toLowerCase() || email,
-          displayName: normalizeText(row.display_name) || fallbackName || email || "المستخدم",
-          accessLevel,
-          canManage: accessLevel === "manager",
-          canClock: Number(row.clock_enabled) === 1,
-        };
-      }
-    } catch (error) {
-      console.error("[habat-v2] principal lookup failed", error);
-      return {
-        ok: false,
-        response: json(500, { ok: false, message: "habat_access_lookup_failed" }),
-      };
-    }
-  }
-
-  if (runtimeRole === "owner") {
+  if (runtimeRole === "owner" && !accessId) {
     return {
       ok: true,
       bootstrapOwner: true,
@@ -193,7 +139,124 @@ async function resolvePrincipal(db, requester) {
     };
   }
 
-  return { ok: false, response: forbidden("habat_access_forbidden") };
+  if (!accessId && !uid && !email) {
+    return {
+      ok: false,
+      response: forbidden("habat_access_forbidden"),
+    };
+  }
+
+  try {
+    let row = null;
+
+    // Native Habat sessions are bound to the canonical access row.
+    // Never re-resolve a known authenticated identity from legacy uid/email.
+    if (accessId) {
+      row = await db
+        .prepare(
+          `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active
+           FROM habat_attendance_access
+           WHERE id = ? AND is_active = 1
+           LIMIT 1`
+        )
+        .bind(accessId)
+        .first();
+
+      if (!row) {
+        return {
+          ok: false,
+          response: forbidden("habat_access_forbidden"),
+        };
+      }
+    } else {
+      row = await db
+        .prepare(
+          `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active
+           FROM habat_attendance_access
+           WHERE is_active = 1
+             AND ((uid IS NOT NULL AND uid = ?) OR lower(email) = ?)
+           ORDER BY CASE WHEN uid = ? THEN 0 ELSE 1 END, created_at ASC
+           LIMIT 1`
+        )
+        .bind(uid, email, uid)
+        .first();
+
+      if (!row) {
+        if (runtimeRole === "owner") {
+          return {
+            ok: true,
+            bootstrapOwner: true,
+            accessId: null,
+            uid,
+            email,
+            displayName: fallbackName || email || "المالك",
+            accessLevel: "manager",
+            canManage: true,
+            canClock: false,
+          };
+        }
+
+        return {
+          ok: false,
+          response: forbidden("habat_access_forbidden"),
+        };
+      }
+
+      const rowUid = normalizeText(row.uid);
+
+      if (
+        !rowUid &&
+        uid &&
+        email &&
+        normalizeText(row.email).toLowerCase() === email
+      ) {
+        try {
+          await db
+            .prepare(
+              `UPDATE habat_attendance_access
+               SET uid = ?, updated_at = ?
+               WHERE id = ? AND (uid IS NULL OR trim(uid) = '')`
+            )
+            .bind(uid, nowIso(), row.id)
+            .run();
+        } catch (error) {
+          console.warn("[habat-v2] access uid backfill skipped", error);
+        }
+      }
+    }
+
+    const accessLevel = HABAT_ACCESS_LEVELS.has(
+      normalizeText(row.access_level)
+    )
+      ? normalizeText(row.access_level)
+      : "employee";
+
+    return {
+      ok: true,
+      bootstrapOwner: false,
+      accessId: normalizeText(row.id),
+      uid: normalizeText(row.uid) || uid || null,
+      email: normalizeText(row.email).toLowerCase() || email,
+      displayName:
+        normalizeText(row.display_name) ||
+        fallbackName ||
+        email ||
+        "المستخدم",
+      accessLevel,
+      canManage: accessLevel === "manager",
+      canClock: Number(row.clock_enabled) === 1,
+    };
+  } catch (error) {
+    console.error("[habat-v2] principal lookup failed", error);
+
+    return {
+      ok: false,
+      response: json(500, {
+        ok: false,
+        message: "habat_access_lookup_failed",
+      }),
+    };
+  }
 }
 
 async function getContext(db, requester, principal) {
