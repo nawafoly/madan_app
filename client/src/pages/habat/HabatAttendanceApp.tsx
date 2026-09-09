@@ -36,6 +36,7 @@ import {
   ShiftsPage,
 } from "./HabatAttendanceAdmin";
 import HabatAttendanceSettings from "./HabatAttendanceSettings";
+import { formatHabatShiftRange } from "./HabatTimeInput";
 import {
   AuditLogPage,
   EmployeePortalPage,
@@ -258,7 +259,7 @@ function ClockPage({
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-xs font-bold text-slate-500">وقت الدوام</p>
             <p className="mt-1 font-black">
-              {context.shift ? `${context.shift.startTime} → ${context.shift.endTime}` : "—"}
+              {context.shift ? formatHabatShiftRange(context.shift.startTime, context.shift.endTime, "ar") : "—"}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">

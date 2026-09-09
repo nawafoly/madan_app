@@ -27,6 +27,7 @@ let volatileClientId = "";
 let networkListenersAttached = false;
 let connectGeneration = 0;
 let connectInFlight = false;
+let reconnectRequestedAfterFlight = false;
 
 const CLIENT_ID_KEY = "habat_realtime_client_id";
 
@@ -135,6 +136,7 @@ async function requestRealtimeTicket(): Promise<string> {
   const response = await fetch("/habat-api/realtime/ticket", {
     method: "POST",
     credentials: "same-origin",
+    cache: "no-store",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -161,11 +163,17 @@ async function requestRealtimeTicket(): Promise<string> {
 }
 
 async function connect(force = false) {
+  if (connectInFlight) {
+    if (force || listeners.size > 0) {
+      reconnectRequestedAfterFlight = true;
+    }
+    return;
+  }
+
   if (
     typeof window === "undefined" ||
     typeof WebSocket === "undefined" ||
-    (!force && listeners.size === 0) ||
-    connectInFlight
+    (!force && listeners.size === 0)
   ) {
     return;
   }
@@ -254,6 +262,11 @@ async function connect(force = false) {
     scheduleReconnect();
   } finally {
     connectInFlight = false;
+
+    if (reconnectRequestedAfterFlight && listeners.size > 0) {
+      reconnectRequestedAfterFlight = false;
+      void connect(true);
+    }
   }
 }
 

@@ -37,6 +37,27 @@ function timeKey(hour: number, minute: number) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function pickerHour12(hour: number) {
+  return hour % 12 || 12;
+}
+
+function pickerMeridiem(hour: number) {
+  return hour >= 12 ? "PM" : "AM";
+}
+
+function pickerHour24(hour: number, meridiem: "AM" | "PM") {
+  let next = Math.min(Math.max(Number(hour) || 12, 1), 12) % 12;
+  if (meridiem === "PM") next += 12;
+  return next;
+}
+
+function formatPickerTime(hour: number, minute: number, language: "ar" | "en") {
+  const suffix = language === "ar"
+    ? pickerMeridiem(hour) === "PM" ? "م" : "ص"
+    : pickerMeridiem(hour);
+  return `${String(pickerHour12(hour)).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
 function parseValue(value: string, mode: PickerMode) {
   if (!value) return null;
 
@@ -233,7 +254,7 @@ export default function HabatDatePicker({
     ? mode === "month"
       ? `${months[selected.month]} ${selected.year}`
       : mode === "datetime"
-        ? `${selected.day} ${months[selected.month]} ${selected.year} · ${timeKey(selected.hour, selected.minute)}`
+        ? `${selected.day} ${months[selected.month]} ${selected.year} · ${formatPickerTime(selected.hour, selected.minute, language)}`
         : `${selected.day} ${months[selected.month]} ${selected.year}`
     : mode === "month"
       ? "اختر الشهر"
@@ -420,11 +441,11 @@ export default function HabatDatePicker({
 
                       <select
                         aria-label={tr(language, "الساعة", "Hour")}
-                        value={draftHour}
-                        onChange={event => setDraftHour(Number(event.target.value))}
+                        value={pickerHour12(draftHour)}
+                        onChange={event => setDraftHour(pickerHour24(Number(event.target.value), pickerMeridiem(draftHour)))}
                         className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-slate-400"
                       >
-                        {Array.from({ length: 24 }, (_, hour) => (
+                        {Array.from({ length: 12 }, (_, index) => index + 1).map(hour => (
                           <option key={hour} value={hour}>
                             {String(hour).padStart(2, "0")}
                           </option>
@@ -444,6 +465,16 @@ export default function HabatDatePicker({
                             {String(minute).padStart(2, "0")}
                           </option>
                         ))}
+                      </select>
+
+                      <select
+                        aria-label={tr(language, "الفترة", "Period")}
+                        value={pickerMeridiem(draftHour)}
+                        onChange={event => setDraftHour(pickerHour24(pickerHour12(draftHour), event.target.value as "AM" | "PM"))}
+                        className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-slate-400"
+                      >
+                        <option value="AM">{language === "ar" ? "ص" : "AM"}</option>
+                        <option value="PM">{language === "ar" ? "م" : "PM"}</option>
                       </select>
                     </div>
 

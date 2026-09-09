@@ -183,6 +183,7 @@ export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> 
     ...init,
     headers,
     credentials: "same-origin",
+    cache: "no-store",
   });
   const payload = (await response.json().catch(() => null)) as
     | Record<string, unknown>
@@ -314,6 +315,7 @@ export function formatTime(value: string | null | undefined): string {
     timeZone: "Asia/Riyadh",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
   });
 }
 

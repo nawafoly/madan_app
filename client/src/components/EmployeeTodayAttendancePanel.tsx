@@ -219,7 +219,7 @@ function formatTimeInputValue(value?: string | null) {
     timeZone: RIYADH_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.hour}:${values.minute}`;

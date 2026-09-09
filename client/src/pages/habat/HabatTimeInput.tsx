@@ -65,7 +65,8 @@ export function toHabat24HourTime(
 }
 
 export function formatHabatClockTime(
-  value: string | null | undefined
+  value: string | null | undefined,
+  language: "ar" | "en" = "en"
 ) {
   if (!value) return "--";
 
@@ -85,18 +86,22 @@ export function formatHabatClockTime(
   }
 
   const hour12 = hour24 % 12 || 12;
-  const meridiem = hour24 >= 12 ? "PM" : "AM";
+  const meridiem =
+    language === "ar"
+      ? hour24 >= 12 ? "م" : "ص"
+      : hour24 >= 12 ? "PM" : "AM";
 
   return `${String(hour12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${meridiem}`;
 }
 
 export function formatHabatShiftRange(
   startTime: string | null | undefined,
-  endTime: string | null | undefined
+  endTime: string | null | undefined,
+  language: "ar" | "en" = "en"
 ) {
   if (!startTime || !endTime) return "--";
 
-  return `${formatHabatClockTime(startTime)} — ${formatHabatClockTime(endTime)}`;
+  return `${formatHabatClockTime(startTime, language)} — ${formatHabatClockTime(endTime, language)}`;
 }
 
 export default function HabatTimeInput({

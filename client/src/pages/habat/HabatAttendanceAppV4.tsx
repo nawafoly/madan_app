@@ -434,7 +434,7 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
 
       <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الشفت", "Shift")}</p><p className="mt-1 text-sm font-black sm:text-base">{context.shift?.name || "غير محدد"}</p></div>
-        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الدوام", "Schedule")}</p><p dir="ltr" className="mt-1 text-start text-sm font-black sm:text-base">{context.shift ? formatHabatShiftRange(context.shift.startTime, context.shift.endTime) : "--"}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الدوام", "Schedule")}</p><p dir="ltr" className="mt-1 text-start text-sm font-black sm:text-base">{context.shift ? formatHabatShiftRange(context.shift.startTime, context.shift.endTime, language) : "--"}</p></div>
         <div className="rounded-2xl bg-slate-50 p-3 sm:p-4"><p className="text-xs text-slate-500">{tr(language, "الموقع", "Location")}</p><p className="mt-1 text-start text-sm font-black sm:text-base">{context.settings.locationRequired ? <span dir="ltr">{`${context.settings.radiusM} m`}</span> : tr(language, "غير إلزامي", "Not Required")}</p></div>
       </div>
 
@@ -732,7 +732,7 @@ function DayDetails({ day }: { day: MonthDay | null }) {
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"><h4 className="font-black">{tr(language, "لم يتم تسجيل حضور لهذا اليوم حتى الآن", "No attendance has been recorded for this day yet")}</h4><p className="mt-1 text-sm text-slate-500">{tr(language, "لا توجد بيانات حضور فعلية لليوم المحدد.", "There is no actual attendance data for the selected day.")}</p></div>
       ) : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label={tr(language, "الدوام المعتمد", "Scheduled Shift")} value={day.shift ? formatHabatShiftRange(day.shift.startTime, day.shift.endTime) : "--"} />
+        <Metric label={tr(language, "الدوام المعتمد", "Scheduled Shift")} value={day.shift ? formatHabatShiftRange(day.shift.startTime, day.shift.endTime, language) : "--"} />
         <Metric label={tr(language, "أول حضور", "First Clock In")} value={formatTime(day.record?.checkInAt)} />
         <Metric label={tr(language, "آخر انصراف", "Last Clock Out")} value={formatTime(day.record?.checkOutAt)} />
         <Metric label={tr(language, "مدة العمل الفعلية", "Actual Worked Time")} value={formatMinutes(day.record?.workedMinutes, language)} />

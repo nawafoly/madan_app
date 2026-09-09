@@ -66,6 +66,7 @@ import HabatAccountManagement from "./HabatAccountManagement";
 import { DashboardPage, ShiftsPage } from "./HabatAttendanceAdmin";
 import HabatAttendanceSettings from "./HabatAttendanceSettings";
 import { AuditLogPage, EmployeePortalPage } from "./HabatAttendancePortal";
+import { formatHabatShiftRange } from "./HabatTimeInput";
 import {
   friendlyHabatError,
   fromRiyadhDateTimeLocal,
@@ -428,7 +429,7 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
             <p className="text-xs font-semibold text-slate-500">وقت الدوام</p>
-            <p dir="ltr" className="mt-1 text-right font-bold">{context.shift ? `${context.shift.startTime} - ${context.shift.endTime}` : "—"}</p>
+            <p dir="ltr" className="mt-1 text-right font-bold">{context.shift ? formatHabatShiftRange(context.shift.startTime, context.shift.endTime, "ar") : "—"}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
             <p className="text-xs font-semibold text-slate-500">الحالة</p>

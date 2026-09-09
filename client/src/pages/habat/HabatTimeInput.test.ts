@@ -24,6 +24,13 @@ describe("Habat 12-hour time UI", () => {
       .toBe("03:00 PM — 11:59 PM");
   });
 
+  it("formats Arabic period markers for Arabic UI", () => {
+    expect(formatHabatClockTime("09:00", "ar")).toBe("09:00 ص");
+    expect(formatHabatClockTime("15:00", "ar")).toBe("03:00 م");
+    expect(formatHabatShiftRange("15:00", "23:59", "ar"))
+      .toBe("03:00 م — 11:59 م");
+  });
+
   it("converts 12-hour input back to canonical HH:mm", () => {
     expect(toHabat24HourTime("12", "00", "AM")).toBe("00:00");
     expect(toHabat24HourTime("12", "00", "PM")).toBe("12:00");

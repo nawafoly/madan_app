@@ -283,7 +283,7 @@ export function EmployeePortalPage() {
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="flex items-center gap-2 text-xs font-bold text-slate-500"><Clock3 size={14} /> {tr(language, "الدوام", "Schedule")}</p>
-              <p className="mt-2 font-black">{today?.shift ? formatHabatShiftRange(today.shift.startTime, today.shift.endTime) : "—"}</p>
+              <p className="mt-2 font-black">{today?.shift ? formatHabatShiftRange(today.shift.startTime, today.shift.endTime, language) : "—"}</p>
             </div>
             <div className="rounded-2xl bg-emerald-50 p-4">
               <p className="text-xs font-bold text-emerald-700">{tr(language, "الحضور", "Clock In")}</p>
@@ -322,7 +322,7 @@ export function EmployeePortalPage() {
             </div>
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
               <span className="text-slate-500">{tr(language, "الوقت", "Time")}</span>
-              <strong>{shift ? formatHabatShiftRange(shift.startTime, shift.endTime) : "—"}</strong>
+              <strong>{shift ? formatHabatShiftRange(shift.startTime, shift.endTime, language) : "—"}</strong>
             </div>
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
               <span className="text-slate-500">{tr(language, "سماح التأخير", "Grace Period")}</span>

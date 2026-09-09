@@ -86,8 +86,6 @@ type AssignmentRow = {
   week_pattern_json?: string | null;
   weekly_rest_weekday?: number | null;
   reason?: string | null;
-  weekly_rest_weekday?: number | null;
-  week_pattern_json?: string | null;
   createdAt?: string | null;
 };
 
@@ -218,8 +216,9 @@ function nullableNumber(value: string) {
   return Number.isFinite(number) ? number : null;
 }
 
-function dateText(value?: string | null) {
+function dateText(value?: string | null, language: "ar" | "en" = "en") {
   if (!value) return "—";
+  if (value === "1970-01-01") return tr(language, "سجل تأسيسي قديم", "Legacy baseline");
   const parsed = new Date(`${value}T12:00:00+03:00`);
   if (Number.isNaN(parsed.getTime())) return value;
   return new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "2-digit", day: "2-digit" }).format(parsed);
@@ -228,8 +227,8 @@ function dateText(value?: string | null) {
 function durationText(item: WorkforceLeave, language: "ar" | "en") {
   if (item.duration_kind === "half_day") return tr(language, "نصف يوم", "Half Day");
   if (item.duration_kind === "partial") {
-    const start = item.partial_start_time ? formatHabatClockTime(item.partial_start_time) : "--";
-    const end = item.partial_end_time ? formatHabatClockTime(item.partial_end_time) : "--";
+    const start = item.partial_start_time ? formatHabatClockTime(item.partial_start_time, language) : "--";
+    const end = item.partial_end_time ? formatHabatClockTime(item.partial_end_time, language) : "--";
     return `${start} — ${end}`;
   }
   return item.start_date === item.end_date ? tr(language, "يوم كامل", "Full Day") : `${dateText(item.start_date)} — ${dateText(item.end_date)}`;
@@ -261,6 +260,19 @@ function defaultWeekPlan(templateId = ""): WeekPlan {
     "5": { kind: "rest" },
     "6": { kind: "work", templateId },
   };
+}
+
+function normalizeWeekPlanForSignature(plan: WeekPlan) {
+  return WEEK_DAYS.map(day => {
+    const config = plan[String(day.value)];
+    return config?.kind === "work"
+      ? { day: day.value, kind: "work", templateId: config.templateId || "" }
+      : { day: day.value, kind: "rest", templateId: "" };
+  });
+}
+
+function weekPlanSignature(plan: WeekPlan) {
+  return JSON.stringify(normalizeWeekPlanForSignature(plan));
 }
 
 function todayRiyadhDateKey() {
@@ -308,12 +320,12 @@ function scheduleSummary(
   function describeTemplate(templateId: string) {
     const template = templatesById.get(templateId);
     if (template) {
-      return `${template.name} · ${formatHabatShiftRange(template.startTime, template.endTime)}`;
+      return `${template.name} · ${formatHabatShiftRange(template.startTime, template.endTime, language)}`;
     }
 
     if (templateId === assignment.template_id && assignment.start_time && assignment.end_time) {
       const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
-      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time, language)}`;
     }
 
     return language === "ar" ? "عمل" : "Work";
@@ -346,14 +358,14 @@ function scheduleSummary(
 
     if (assignment.start_time && assignment.end_time) {
       const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
-      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time, language)}`;
     }
 
     return language === "ar" ? "جدول أسبوعي" : "Weekly schedule";
   } catch {
     if (assignment.start_time && assignment.end_time) {
       const name = assignment.template_name || (language === "ar" ? "شفت" : "Shift");
-      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time)}`;
+      return `${name} · ${formatHabatShiftRange(assignment.start_time, assignment.end_time, language)}`;
     }
     return language === "ar" ? "جدول أسبوعي" : "Weekly schedule";
   }
@@ -390,6 +402,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
   const [assignmentFrom, setAssignmentFrom] = useState(() => todayRiyadhDateKey());
   const [assignmentReason, setAssignmentReason] = useState("");
   const [weekPlan, setWeekPlan] = useState<WeekPlan>(() => defaultWeekPlan());
+  const [savedWeekPlanSignature, setSavedWeekPlanSignature] = useState(() => weekPlanSignature(defaultWeekPlan()));
 
   const resolveEmployeeId = useCallback(async () => {
     const payload = await WorkforceService.listEmployees();
@@ -424,6 +437,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
       const savedWeekPlan = weekPlanFromAssignment(nextAssignments[0]);
       if (savedWeekPlan) {
         setWeekPlan(savedWeekPlan);
+        setSavedWeekPlanSignature(weekPlanSignature(savedWeekPlan));
       }
       setBasic({
         displayName: employeePayload.employee.displayName || "",
@@ -453,16 +467,18 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         attendancePayrollMode: settings.attendancePayrollMode,
         attendancePayrollExemptionReason: settings.attendancePayrollExemptionReason || "",
       } : emptyPayroll);
-      if (templatePayload.templates?.length) {
+      if (!savedWeekPlan && templatePayload.templates?.length) {
         const firstActiveTemplate = templatePayload.templates.find(item => item.isActive);
         if (firstActiveTemplate) {
           setWeekPlan(current => {
             const hasAssignedTemplate = Object.values(current).some(
               item => item.kind === "work" && Boolean(item.templateId)
             );
-            return hasAssignedTemplate
+            const nextPlan = hasAssignedTemplate
               ? current
               : defaultWeekPlan(firstActiveTemplate.id);
+            setSavedWeekPlanSignature(weekPlanSignature(nextPlan));
+            return nextPlan;
           });
         }
       }
@@ -475,6 +491,11 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
 
   useEffect(() => { void load(); }, [identity.accountEmail, identity.accountUid]);
   useHabatRealtimeRefresh(load);
+
+  const currentWeekPlanSignature = useMemo(() => weekPlanSignature(weekPlan), [weekPlan]);
+  const hasUnsavedScheduleChanges = currentWeekPlanSignature !== savedWeekPlanSignature;
+  const needsInitialScheduleSave = assignments.length === 0;
+  const canSaveSchedule = hasUnsavedScheduleChanges || needsInitialScheduleSave;
 
   const totalMonthly = useMemo(() => {
     if (!file?.payrollSettings) return 0;
@@ -761,7 +782,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
                   {assignments.map((item, index) => (
                     <TableRow key={item.id || index}>
                       <TableCell className="font-bold">{scheduleSummary(item, templates, language)}</TableCell>
-                      <TableCell>{dateText(item.effective_from)}</TableCell>
+                      <TableCell>{dateText(item.effective_from, language)}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
                           {index === 0 ? tr(language, "الحالي", "Current") : tr(language, "سابق", "Previous")}
@@ -785,11 +806,20 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
             onSubmit={createAssignment}
             className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
           >
-            <div>
-              <h3 className="font-black">{tr(language, "جدول الموظف الأسبوعي", "Employee Weekly Schedule")}</h3>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                {tr(language, "حدد لكل يوم هل هو يوم عمل أو راحة. يمكن استخدام شفت مختلف لكل يوم.", "Set each day as work or rest. A different shift may be used for each day.")}
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="font-black">{tr(language, "جدول الموظف الأسبوعي", "Employee Weekly Schedule")}</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  {tr(language, "حدد لكل يوم هل هو يوم عمل أو راحة. يمكن استخدام شفت مختلف لكل يوم.", "Set each day as work or rest. A different shift may be used for each day.")}
+                </p>
+              </div>
+              <Badge variant="outline" className={hasUnsavedScheduleChanges ? "w-fit rounded-full border-amber-300 bg-amber-50 px-3 py-1 text-amber-800" : "w-fit rounded-full border-emerald-300 bg-emerald-50 px-3 py-1 text-emerald-800"}>
+                {hasUnsavedScheduleChanges
+                  ? tr(language, "توجد تغييرات غير محفوظة", "Unsaved changes")
+                  : needsInitialScheduleSave
+                    ? tr(language, "لم يتم حفظ جدول لهذا الموظف بعد", "No saved schedule yet")
+                  : tr(language, "يعرض آخر جدول محفوظ", "Latest saved schedule loaded")}
+              </Badge>
             </div>
 
             <div className="space-y-3">
@@ -857,7 +887,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
                             .filter(item => item.isActive)
                             .map(item => (
                               <SelectItem key={item.id} value={item.id}>
-                                {item.name} · {formatHabatShiftRange(item.startTime, item.endTime)}
+                                {item.name} · {formatHabatShiftRange(item.startTime, item.endTime, language)}
                               </SelectItem>
                             ))}
                         </SelectContent>
@@ -893,14 +923,23 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
               {tr(language, "تاريخ السريان هو أول يوم يعمل فيه الجدول الجديد. لا تحدد تاريخ نهاية للجدول؛ النظام يحفظ النسخة السابقة تلقائيًا عند بدء نسخة جديدة.", "The effective date is the first day the new schedule applies. Do not set an end date; the system automatically preserves the previous version when a new version starts.")}
             </div>
 
-            <Button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-black"
-            >
-              <Plus className="h-4 w-4" />
-              {tr(language, "حفظ جدول الموظف", "Save Employee Schedule")}
-            </Button>
+            <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-slate-600">
+                {hasUnsavedScheduleChanges
+                  ? tr(language, "احفظ التغييرات لتصبح هي الجدول الفعلي من تاريخ السريان.", "Save changes to make them the actual schedule from the effective date.")
+                  : needsInitialScheduleSave
+                    ? tr(language, "احفظ الجدول الحالي ليصبح جدول الموظف الفعلي.", "Save the current schedule to make it the employee's actual schedule.")
+                  : tr(language, "لا توجد تغييرات غير محفوظة على الجدول الأسبوعي.", "No unsaved changes in the weekly schedule.")}
+              </p>
+              <Button
+                type="submit"
+                disabled={saving || !canSaveSchedule}
+                className="rounded-xl bg-black"
+              >
+                <Plus className="h-4 w-4" />
+                {tr(language, "حفظ جدول الموظف", "Save Employee Schedule")}
+              </Button>
+            </div>
           </form>
 
           {employeeId ? (

@@ -18,6 +18,7 @@ import {
 import { workforceApi, WorkforceApiError } from "./workforceClient";
 
 import HabatDatePicker from "@/pages/habat/HabatDatePicker";
+import { formatHabatClockTime } from "@/pages/habat/HabatTimeInput";
 import { useHabatRealtimeRefresh } from "@/pages/habat/habatRealtimeClient";
 type AttendanceDay = {
   date: string;
@@ -85,13 +86,13 @@ function dateText(value: string) {
   return new Intl.DateTimeFormat("en-GB", { year: "numeric", month: "2-digit", day: "2-digit" }).format(parsed);
 }
 
-function timeText(value: string | null) {
+function timeText(value: string | null, language: "ar" | "en") {
   if (!value) return "—";
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: true }).format(parsed);
+    return new Intl.DateTimeFormat(language === "ar" ? "ar-SA-u-nu-latn" : "en-US", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hour12: true }).format(parsed);
   }
-  return value.slice(0, 5) || value;
+  return formatHabatClockTime(value, language);
 }
 
 function minutesText(value: number, language: "ar" | "en") {
@@ -202,8 +203,8 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
                 {payload.days.map(day => (
                   <TableRow key={day.date}>
                     <TableCell className="font-semibold">{dateText(day.date)}</TableCell>
-                    <TableCell dir="ltr" className="text-start">{timeText(day.checkInAt)}</TableCell>
-                    <TableCell dir="ltr" className="text-start">{timeText(day.checkOutAt)}</TableCell>
+                    <TableCell dir="ltr" className="text-start">{timeText(day.checkInAt, language)}</TableCell>
+                    <TableCell dir="ltr" className="text-start">{timeText(day.checkOutAt, language)}</TableCell>
                     <TableCell>{day.explicitAbsence ? tr(language, "غياب", "Absent") : day.status || "—"}</TableCell>
                     <TableCell>{minutesText(day.lateMinutes, language)}</TableCell>
                     <TableCell>{minutesText(day.earlyLeaveMinutes, language)}</TableCell>

@@ -123,6 +123,7 @@ export async function workforceApi<T>(path: string, init?: RequestInit): Promise
     ...init,
     headers,
     credentials: "same-origin",
+    cache: "no-store",
   });
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
 
