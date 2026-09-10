@@ -283,3 +283,13 @@ test("administrative absence cannot be created for today or future dates", () =>
     /workforce_absence_requires_completed_day/
   );
 });
+test("manual attendance uses workforce service dates, not Habat account creation date", () => {
+  const v3 = fs.readFileSync(
+    new URL("./habat-attendance-v3.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.doesNotMatch(v3, /habat_date_before_enrollment/);
+  assert.doesNotMatch(v3, /date < enrollmentDate/);
+  assert.match(v3, /assertWorkforceDayMutationAllowed/);
+});

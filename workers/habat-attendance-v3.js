@@ -332,10 +332,7 @@ async function createManualRecord(db, request, requester) {
   const access = accessResult.row;
   if (Number(access.is_active) !== 1) return json(409, { ok: false, message: "habat_inactive_access" });
   if (Number(access.clock_enabled) !== 1) return json(409, { ok: false, message: "habat_clock_disabled_for_date" });
-  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
-  if (enrollmentDate && date < enrollmentDate) {
-    return json(409, { ok: false, message: "habat_date_before_enrollment" });
-  }
+
   const uid = normalizeText(access.uid);
   if (!uid) return json(409, { ok: false, message: "habat_employee_login_required_before_manual_record" });
 
