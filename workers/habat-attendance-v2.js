@@ -1771,6 +1771,18 @@ function methodNotAllowed(methods) {
   });
 }
 
+function mapPrincipal(principal) {
+  return {
+    uid: principal.uid || null,
+    email: principal.email || null,
+    displayName: principal.displayName || null,
+    accessLevel: principal.accessLevel,
+    canManage: Boolean(principal.canManage),
+    canClock: Boolean(principal.canClock),
+    bootstrapOwner: Boolean(principal.bootstrapOwner),
+    accessId: principal.accessId || null,
+  };
+}
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
