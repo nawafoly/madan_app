@@ -2230,6 +2230,9 @@ function resolveCorsOrigin(request, env) {
 }
 
 function withCors(response, request, env) {
+  if (response?.status === 101 || response?.webSocket) {
+    return response;
+  }
   const headers = new Headers(response.headers);
   const allowedOrigin = resolveCorsOrigin(request, env);
 
