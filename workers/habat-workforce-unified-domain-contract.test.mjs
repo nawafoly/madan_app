@@ -210,3 +210,19 @@ test("attendance never marks payroll stale before the attendance write succeeds"
     assert.doesNotMatch(before, eager, `${name} must not stale payroll before attendance write`);
   }
 });
+
+
+test("v2 context mapper helpers are all defined", () => {
+  const v2 = fs.readFileSync(new URL("./habat-attendance-v2.js", import.meta.url), "utf8");
+  for (const helper of [
+    "mapPrincipal",
+    "mapShift",
+    "mapAssignment",
+    "mapSettings",
+    "mapPublicSettings",
+    "mapRecord",
+    "mapClockLocation",
+  ]) {
+    assert.match(v2, new RegExp(`function ${helper}\\(`), `${helper} must be defined`);
+  }
+});

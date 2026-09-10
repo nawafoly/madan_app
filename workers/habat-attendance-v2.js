@@ -1783,6 +1783,100 @@ function mapPrincipal(principal) {
     accessId: principal.accessId || null,
   };
 }
+function mapShift(row) {
+  if (!row) return null;
+  return {
+    id: normalizeText(row.id),
+    name: normalizeText(row.name),
+    startTime: normalizeTime(row.start_time),
+    endTime: normalizeTime(row.end_time),
+    graceMinutes: Number(row.grace_minutes || 0),
+    earlyLeaveToleranceMinutes: Number(row.early_leave_tolerance_minutes || 0),
+    workingDays: parseWorkingDays(row.working_days),
+    isActive: Number(row.is_active) === 1,
+  };
+}
+
+function mapAssignment(row) {
+  if (!row) return null;
+  return {
+    id: normalizeText(row.id),
+    accessId: normalizeText(row.access_id),
+    shiftId: normalizeText(row.shift_id),
+    effectiveFrom: normalizeText(row.effective_from),
+    effectiveTo: normalizeText(row.effective_to) || null,
+    shiftName: normalizeText(row.shift_name) || null,
+    startTime: normalizeTime(row.start_time) || null,
+    endTime: normalizeTime(row.end_time) || null,
+    email: normalizeText(row.email).toLowerCase() || null,
+    displayName: normalizeText(row.display_name) || null,
+  };
+}
+
+function mapSettings(row) {
+  return {
+    timezone: normalizeText(row?.timezone) || "Asia/Riyadh",
+    locationRequired: Number(row?.location_required) === 1,
+    latitude: normalizeNullableNumber(row?.latitude),
+    longitude: normalizeNullableNumber(row?.longitude),
+    radiusM: Number(row?.radius_m || 100),
+    maxAccuracyM: Number(row?.max_accuracy_m || 150),
+    updatedAt: normalizeText(row?.updated_at) || null,
+  };
+}
+
+function mapPublicSettings(row) {
+  return {
+    timezone: normalizeText(row?.timezone) || "Asia/Riyadh",
+    locationRequired: Number(row?.location_required) === 1,
+    radiusM: Number(row?.radius_m || 100),
+    maxAccuracyM: Number(row?.max_accuracy_m || 150),
+    locationConfigured:
+      normalizeNullableNumber(row?.latitude) !== null &&
+      normalizeNullableNumber(row?.longitude) !== null,
+  };
+}
+
+function mapRecord(row) {
+  if (!row) return null;
+  return {
+    id: normalizeText(row.id),
+    accessId: normalizeText(row.access_id) || null,
+    accountUid: normalizeText(row.account_uid),
+    accountEmail: normalizeText(row.account_email).toLowerCase() || null,
+    displayName: normalizeText(row.display_name) || null,
+    attendanceDate: normalizeText(row.attendance_date),
+    checkInAt: normalizeText(row.check_in_at) || null,
+    checkOutAt: normalizeText(row.check_out_at) || null,
+    shiftId: normalizeText(row.shift_id) || null,
+    scheduledStartAt: normalizeText(row.scheduled_start_at) || null,
+    scheduledEndAt: normalizeText(row.scheduled_end_at) || null,
+    attendanceStatus: normalizeText(row.attendance_status) || null,
+    lateMinutes: Number(row.late_minutes || 0),
+    earlyLeaveMinutes: Number(row.early_leave_minutes || 0),
+    workedMinutes:
+      row.worked_minutes === null || row.worked_minutes === undefined
+        ? null
+        : Number(row.worked_minutes),
+    checkInLocation: mapClockLocation(row, "check_in"),
+    checkOutLocation: mapClockLocation(row, "check_out"),
+    notes: normalizeText(row.notes) || null,
+    createdAt: normalizeText(row.created_at) || null,
+    updatedAt: normalizeText(row.updated_at) || null,
+  };
+}
+
+function mapClockLocation(row, prefix) {
+  const latitude = normalizeNullableNumber(row?.[`${prefix}_latitude`]);
+  const longitude = normalizeNullableNumber(row?.[`${prefix}_longitude`]);
+  const accuracyM = normalizeNullableNumber(row?.[`${prefix}_accuracy_m`]);
+  const distanceM = normalizeNullableNumber(row?.[`${prefix}_distance_m`]);
+  if (latitude === null && longitude === null && accuracyM === null && distanceM === null) {
+    return null;
+  }
+  return { latitude, longitude, accuracyM, distanceM };
+}
+
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
