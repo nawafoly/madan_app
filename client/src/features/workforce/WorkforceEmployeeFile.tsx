@@ -410,8 +410,8 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
     return match?.id || null;
   }, [identity.accountEmail, identity.accountUid]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const resolvedId = employeeId || (await resolveEmployeeId());
@@ -485,12 +485,17 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
     } catch (caught) {
       setError(friendlyError(caught, language));
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [employeeId, resolveEmployeeId]);
 
-  useEffect(() => { void load(); }, [identity.accountEmail, identity.accountUid]);
-  useHabatRealtimeRefresh(load);
+  useEffect(() => { void load(true); }, [identity.accountEmail, identity.accountUid]);
+
+  const refreshFromRealtime = useCallback(async () => {
+    await load(false);
+  }, [load]);
+
+  useHabatRealtimeRefresh(refreshFromRealtime);
 
   const currentWeekPlanSignature = useMemo(() => weekPlanSignature(weekPlan), [weekPlan]);
   const hasUnsavedScheduleChanges = currentWeekPlanSignature !== savedWeekPlanSignature;

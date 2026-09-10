@@ -115,6 +115,46 @@ type PageKey =
   | "audit"
   | "settings";
 
+const HABAT_PAGE_STORAGE_KEY = "habat.currentPage";
+const HABAT_EMPLOYEE_STORAGE_KEY = "habat.selectedEmployee";
+
+const HABAT_PAGE_KEYS = new Set<PageKey>([
+  "clock",
+  "dashboard",
+  "profile",
+  "history",
+  "employees",
+  "employee-file",
+  "accounts",
+  "shifts",
+  "records",
+  "reports",
+  "audit",
+  "settings",
+]);
+
+function initialHabatPage(): PageKey {
+  try {
+    const stored = sessionStorage.getItem(HABAT_PAGE_STORAGE_KEY);
+    return stored && HABAT_PAGE_KEYS.has(stored as PageKey)
+      ? (stored as PageKey)
+      : "clock";
+  } catch {
+    return "clock";
+  }
+}
+
+function initialSelectedEmployee(): HabatAccessAccount | null {
+  try {
+    const raw = sessionStorage.getItem(HABAT_EMPLOYEE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as HabatAccessAccount;
+    return parsed?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 type DayOverride = {
   id: string;
   accessId: string;
@@ -1273,9 +1313,32 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
   }, [onContextRefresh]);
 
   useHabatRealtimeRefresh(refreshFromRealtime);
-  const [page, setPage] = useState<PageKey>("clock");
-  const [selectedEmployee, setSelectedEmployee] = useState<HabatAccessAccount | null>(null);
+  const [page, setPage] = useState<PageKey>(initialHabatPage);
+  const [selectedEmployee, setSelectedEmployee] = useState<HabatAccessAccount | null>(initialSelectedEmployee);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(HABAT_PAGE_STORAGE_KEY, page);
+    } catch {
+      // Storage may be unavailable; navigation still works in-memory.
+    }
+  }, [page]);
+
+  useEffect(() => {
+    try {
+      if (selectedEmployee) {
+        sessionStorage.setItem(
+          HABAT_EMPLOYEE_STORAGE_KEY,
+          JSON.stringify(selectedEmployee)
+        );
+      } else {
+        sessionStorage.removeItem(HABAT_EMPLOYEE_STORAGE_KEY);
+      }
+    } catch {
+      // Storage may be unavailable; employee selection still works in-memory.
+    }
+  }, [selectedEmployee]);
 
   const managerItems: NavItem[] = [
     { key: "clock", label: tr(language, "الحضور والانصراف", "Clock In / Out"), icon: Fingerprint },
@@ -1296,6 +1359,9 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
   const items = context.principal.canManage ? managerItems : employeeItems;
 
   function navigate(next: PageKey) {
+    if (next !== "employee-file") {
+      setSelectedEmployee(null);
+    }
     setPage(next);
     setMobileOpen(false);
   }
