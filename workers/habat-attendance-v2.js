@@ -1571,6 +1571,29 @@ async function getTodayRecord(db, uid, accessId = "") {
   }
 }
 
+function buildScheduleWindow(dateKey, shift) {
+  const startTime = normalizeTime(shift?.start_time) || "09:00";
+  const endTime = normalizeTime(shift?.end_time) || "17:00";
+
+  const start = new Date(`${dateKey}T${startTime}:00+03:00`);
+  let end = new Date(`${dateKey}T${endTime}:00+03:00`);
+
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return { start, end };
+}
+
+function isWorkingDay(dateKey, shift) {
+  const days = parseWorkingDays(shift?.working_days);
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const weekday = new Date(
+    Date.UTC(year, month - 1, day, 12, 0, 0)
+  ).getUTCDay();
+
+  return days.includes(weekday);
+}
 async function writeAudit(db, requester, action, entityType, entityId, before, after) {
   try {
     await db.prepare(
