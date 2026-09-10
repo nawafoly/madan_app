@@ -188,3 +188,25 @@ test("v3 manual attendance resolves access_id before legacy uid fallback", () =>
   assert.match(v3, /access_id = \?/);
   assert.match(v3, /access_id IS NULL OR trim\(access_id\) = ''/);
 });
+
+
+test("attendance never marks payroll stale before the attendance write succeeds", () => {
+  const legacy = fs.readFileSync(new URL("./habat-attendance-core.js", import.meta.url), "utf8");
+  const v2 = fs.readFileSync(new URL("./habat-attendance-v2.js", import.meta.url), "utf8");
+
+  const slices = [
+    ["checkIn", legacy.slice(legacy.indexOf("async function checkIn("), legacy.indexOf("async function checkOut(")), "workforceGuard"],
+    ["checkOut", legacy.slice(legacy.indexOf("async function checkOut("), legacy.indexOf("async function listRecords(")), "workforceGuard"],
+    ["clockIn", v2.slice(v2.indexOf("async function clockIn("), v2.indexOf("async function clockOut(")), "workforceGuard"],
+    ["clockOut", v2.slice(v2.indexOf("async function clockOut("), v2.indexOf("async function listMyHistory(")), "workforceGuard"],
+    ["correctRecord", v2.slice(v2.indexOf("async function correctRecord("), v2.indexOf("async function getSummaryReport(")), "correctionGuard"],
+  ];
+
+  for (const [name, source, guardVar] of slices) {
+    const marker = source.indexOf(`// payroll_stale_after_${name}`);
+    assert.ok(marker >= 0, `${name} missing post-write stale marker`);
+    const before = source.slice(0, marker);
+    const eager = new RegExp(`if \\\(${guardVar}\\?\\.staleStatements\\?\\.length\\) \\\{\\s*await db\\.batch\\(${guardVar}\\.staleStatements\\);\\s*\\}`);
+    assert.doesNotMatch(before, eager, `${name} must not stale payroll before attendance write`);
+  }
+});

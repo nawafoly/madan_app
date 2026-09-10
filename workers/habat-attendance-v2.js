@@ -383,10 +383,7 @@ async function clockIn(db, request, requester, principal) {
         mutation: "check_in",
       })
     : null;
-  if (workforceGuard?.staleStatements?.length) {
-    await db.batch(workforceGuard.staleStatements);
-  }
-  if (existing?.check_in_at) {
+if (existing?.check_in_at) {
     return json(409, {
       ok: false,
       message: "habat_already_checked_in",
@@ -516,10 +513,7 @@ async function clockOut(db, request, requester, principal) {
         mutation: "check_out",
       })
     : null;
-  if (workforceGuard?.staleStatements?.length) {
-    await db.batch(workforceGuard.staleStatements);
-  }
-  if (!existing?.check_in_at) {
+if (!existing?.check_in_at) {
     return json(409, { ok: false, message: "habat_check_in_required" });
   }
   if (existing.check_out_at) {
@@ -1134,11 +1128,7 @@ async function correctRecord(db, request, requester, id) {
         mutation: "correction",
       })
     : null;
-  if (correctionGuard?.staleStatements?.length) {
-    await db.batch(correctionGuard.staleStatements);
-  }
-
-  const body = await readJsonBody(request);
+const body = await readJsonBody(request);
   if (!body.ok) return body.response;
   const reason = normalizeText(body.value?.reason);
   if (reason.length < 3) {
