@@ -1,4 +1,5 @@
 import { resolveWorkforceScheduleDay, resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+import { resolveWorkforceDayRange, resolveWorkforceEmployeeBySource, assertWorkforceDayMutationAllowed, assertPayrollSourceMutationAllowed, buildPayrollStaleStatements } from "./workforce-day-state.js";
 
 const DEFAULT_SHIFT_ID = "habat_shift_default";
 const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
@@ -171,33 +172,19 @@ async function getMonthWorkspace(db, url, principal) {
 
 async function buildMonthWorkspace(db, access, month) {
   const range = monthRange(month);
-  const workforceLink = await db.prepare(
-    `SELECT employee_id
-       FROM workforce_attendance_links
-      WHERE tenant_id = ? AND source_employee_id = ?
-        AND COALESCE(status, 'confirmed') = 'confirmed'
-      LIMIT 1`
-  ).bind(WORKFORCE_TENANT_ID, access.id).first();
+  const employee = await resolveWorkforceEmployeeBySource(
+    db,
+    WORKFORCE_TENANT_ID,
+    access.id
+  );
 
-  const [recordsResult, overridesResult, shiftsResult, assignmentsResult, savedSummary] = await Promise.all([
+  const [recordsResult, savedSummary] = await Promise.all([
     db.prepare(
       `SELECT * FROM habat_attendance_records
        WHERE attendance_date >= ? AND attendance_date <= ?
          AND (access_id = ? OR lower(account_email) = lower(?))
        ORDER BY attendance_date ASC`
     ).bind(range.from, range.to, access.id, access.email).all(),
-    db.prepare(
-      `SELECT * FROM habat_attendance_day_overrides
-       WHERE access_id = ? AND attendance_date >= ? AND attendance_date <= ?
-       ORDER BY attendance_date ASC`
-    ).bind(access.id, range.from, range.to).all(),
-    db.prepare(`SELECT * FROM habat_attendance_shifts ORDER BY created_at ASC`).all(),
-    db.prepare(
-      `SELECT * FROM habat_attendance_shift_assignments
-       WHERE access_id = ? AND effective_from <= ?
-         AND (effective_to IS NULL OR effective_to >= ?)
-       ORDER BY effective_from ASC`
-    ).bind(access.id, range.to, range.from).all(),
     db.prepare(
       `SELECT id, summary_json, generated_at
        FROM habat_attendance_monthly_summaries
@@ -206,80 +193,102 @@ async function buildMonthWorkspace(db, access, month) {
   ]);
 
   const records = recordsResult?.results || [];
-  const overrides = overridesResult?.results || [];
-  const shifts = shiftsResult?.results || [];
-  const assignments = assignmentsResult?.results || [];
-  const workforceSchedules = workforceLink?.employee_id
-    ? await resolveWorkforceScheduleRange(
-        db,
-        WORKFORCE_TENANT_ID,
-        workforceLink.employee_id,
-        range.from,
-        range.to
-      )
-    : [];
-  const workforceScheduleByDate = new Map(
-    (workforceSchedules || []).map(schedule => [normalizeText(schedule.date), schedule])
-  );
-  const recordByDate = new Map(records.map(row => [normalizeText(row.attendance_date), row]));
-  const overrideByDate = new Map(overrides.map(row => [normalizeText(row.attendance_date), row]));
+  if (!employee?.id) {
+    return {
+      access: mapAccess(access),
+      month,
+      from: range.from,
+      to: range.to,
+      days: [],
+      records: records.map(mapRecord),
+      overrides: [],
+      savedSummary: savedSummary
+        ? { id: savedSummary.id, generatedAt: savedSummary.generated_at, summary: safeJson(savedSummary.summary_json) }
+        : null,
+      workforceReady: false,
+    };
+  }
+
+  const canonicalDays = await resolveWorkforceDayRange({
+    db,
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId: employee.id,
+    from: range.from,
+    to: range.to,
+    sourceRows: records,
+  });
+
   const today = getRiyadhDateKey();
   const now = new Date();
-  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
-  const clockEnabled = Number(access.clock_enabled) === 1;
 
-  const days = enumerateDateKeys(range.from, range.to).map(date => {
-    const record = recordByDate.get(date) || null;
-    const override = overrideByDate.get(date) || null;
-    const hasActualData = Boolean(record || override);
-    const beforeEnrollment = Boolean(enrollmentDate && date < enrollmentDate && !hasActualData);
-    const clockDisabled = !clockEnabled && !hasActualData;
+  const days = canonicalDays.map(day => {
+    const schedule = day.schedule;
+    const workingDay = Boolean(schedule?.ready && schedule?.isWorkingDay);
+    const scheduleWindow = workingDay ? buildScheduleWindow(day.date, {
+      start_time: schedule.startTime,
+      end_time: schedule.endTime,
+    }) : null;
+    const attendanceWindowStarted =
+      day.date < today ||
+      (day.date === today && Boolean(scheduleWindow) && now.getTime() >= scheduleWindow.start.getTime());
 
-    if (beforeEnrollment || clockDisabled) {
-      return {
-        date,
-        weekday: weekdayIndex(date),
-        workingDay: false,
-        state: "future",
-        shift: null,
-        record: mapRecord(record),
-        override: mapOverride(override),
-        eligible: false,
-        eligibilityReason: beforeEnrollment ? "before_enrollment" : "clock_disabled",
-        attendanceWindowStarted: false,
-      };
-    }
+    const mappedState =
+      day.state === "before_employment" || day.state === "after_employment" ? "future" :
+      day.state === "rest" ? "off" :
+      day.state === "leave" ? "leave" :
+      day.state === "absence" ? "absence" :
+      day.state === "conflict" ? "attention" :
+      day.state === "incomplete" ? "incomplete" :
+      ["late","early_leave","late_early_leave"].includes(day.state) ? "attention" :
+      day.state === "present" ? "complete" :
+      day.state === "future" ? "future" :
+      day.state === "work" ? "today_pending" :
+      day.state === "missing" && day.date < today ? "absence" : "pending";
 
-    const shift = resolveV3ShiftForDate(date, workforceScheduleByDate, assignments, shifts);
-    const workingDay = shift ? parseWorkingDays(shift.working_days).includes(weekdayIndex(date)) : true;
-    const future = date > today;
-    const schedule = shift ? buildScheduleWindow(date, shift) : null;
-    const attendanceWindowStarted = date < today || (date === today && Boolean(schedule) && now.getTime() >= schedule.start.getTime());
-    let state = "pending";
-    if (future) state = "future";
-    else if (!workingDay) state = "off";
-    else if (override?.override_type === "emergency_leave") state = "leave";
-    else if (override?.override_type === "absence") state = "absence";
-    else if (record?.check_in_at && record?.check_out_at) {
-      state = String(record.attendance_status || "").includes("late") || String(record.attendance_status || "").includes("early_leave")
-        ? "attention"
-        : "complete";
-    } else if (record?.check_in_at) state = "incomplete";
-    else if (date < today) state = "absence";
-    else if (!attendanceWindowStarted) state = "pending";
-    else state = "today_pending";
+    const leave = day.leaveRefs?.[0] || null;
+    const override = leave ? {
+      id: leave.id,
+      accessId: access.id,
+      attendanceDate: day.date,
+      type: "leave",
+      leaveType: leave.type,
+      dayPortion: leave.duration === "full_day" ? "full_day" : "half_day",
+      reason: null,
+      source: "workforce_leaves",
+    } : day.absence ? {
+      id: day.absence.id,
+      accessId: access.id,
+      attendanceDate: day.date,
+      type: "absence",
+      dayPortion: day.absence.day_portion,
+      reason: day.absence.reason || null,
+      source: "workforce_absences",
+    } : null;
 
     return {
-      date,
-      weekday: weekdayIndex(date),
+      date: day.date,
+      weekday: weekdayIndex(day.date),
       workingDay,
-      state,
-      shift: mapShift(shift),
-      record: mapRecord(record),
-      override: mapOverride(override),
-      eligible: true,
-      eligibilityReason: null,
+      state: mappedState,
+      canonicalState: day.state,
+      shift: schedule?.ready ? mapShift({
+        id: schedule.templateId || schedule.assignmentId || "workforce_schedule",
+        name: schedule.templateName || "Workforce schedule",
+        start_time: schedule.startTime,
+        end_time: schedule.endTime,
+        grace_minutes: schedule.graceMinutes,
+        early_leave_tolerance_minutes: schedule.earlyLeaveToleranceMinutes,
+        working_days: workingDay ? String(weekdayIndex(day.date)) : "",
+        is_active: 1,
+      }) : null,
+      record: mapRecord(day.attendance),
+      override,
+      eligible: day.employmentEligible,
+      eligibilityReason: day.employmentEligible ? null : day.state,
       attendanceWindowStarted,
+      expectedAttendanceMinutes: day.expectedAttendanceMinutes,
+      paidExcusedMinutes: day.paidExcusedMinutes,
+      conflicts: day.conflicts,
     };
   });
 
@@ -290,10 +299,11 @@ async function buildMonthWorkspace(db, access, month) {
     to: range.to,
     days,
     records: records.map(mapRecord),
-    overrides: overrides.map(mapOverride),
+    overrides: days.map(day => day.override).filter(Boolean),
     savedSummary: savedSummary
       ? { id: savedSummary.id, generatedAt: savedSummary.generated_at, summary: safeJson(savedSummary.summary_json) }
       : null,
+    workforceReady: true,
   };
 }
 
@@ -331,14 +341,31 @@ async function createManualRecord(db, request, requester) {
 
   const existing = await db.prepare(
     `SELECT * FROM habat_attendance_records
-     WHERE attendance_date = ? AND (access_id = ? OR account_uid = ?) LIMIT 1`
-  ).bind(date, accessId, uid).first();
+     WHERE attendance_date = ?
+       AND (
+         access_id = ?
+         OR (
+           (access_id IS NULL OR trim(access_id) = '')
+           AND account_uid = ?
+         )
+       )
+     ORDER BY CASE WHEN access_id = ? THEN 0 ELSE 1 END, created_at ASC
+     LIMIT 1`
+  ).bind(date, accessId, uid, accessId).first();
   if (existing) return json(409, { ok: false, message: "habat_attendance_record_already_exists" });
 
-  const override = await db.prepare(
-    `SELECT * FROM habat_attendance_day_overrides WHERE access_id = ? AND attendance_date = ? LIMIT 1`
-  ).bind(accessId, date).first();
-  if (override) return json(409, { ok: false, message: "habat_day_override_exists" });
+  const employee = await resolveWorkforceEmployeeBySource(db, WORKFORCE_TENANT_ID, accessId);
+  if (!employee?.id) return json(409, { ok: false, message: "workforce_employee_not_linked" });
+  await assertPayrollSourceMutationAllowed(db, WORKFORCE_TENANT_ID, employee.id, date);
+  const [canonicalDay] = await resolveWorkforceDayRange({
+    db,
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId: employee.id,
+    from: date,
+    to: date,
+    sourceRows: [],
+  });
+  assertWorkforceDayMutationAllowed(canonicalDay, "attendance");
 
   const shift = await resolveShiftForAccessDate(db, accessId, date);
   if (!shift) return json(409, { ok: false, message: "habat_shift_not_configured" });
@@ -362,6 +389,17 @@ async function createManualRecord(db, request, requester) {
       metrics.status, metrics.lateMinutes, metrics.earlyLeaveMinutes, metrics.workedMinutes,
       `إضافة يدوية: ${reason}`, now, now
     ).run();
+    // payroll_stale_after_manual_record
+    const staleStatements = buildPayrollStaleStatements(db, {
+      tenantId: WORKFORCE_TENANT_ID,
+      employeeId: employee.id,
+      fromDate: date,
+      toDate: date,
+      reason: "attendance_manual_record_changed",
+      now,
+    });
+    if (staleStatements.length) await db.batch(staleStatements);
+
     const created = await db.prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`).bind(id).first();
     await writeAudit(db, requester, "manager_create_manual_record", "habat_attendance_record", id, null, { ...created, reason });
     return json(200, { ok: true, record: mapRecord(created) });
@@ -372,26 +410,95 @@ async function createManualRecord(db, request, requester) {
 }
 
 async function deleteAttendanceRecord(db, requester, id) {
-  const current = await db.prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`).bind(id).first();
+  const current = await db
+    .prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`)
+    .bind(id)
+    .first();
   if (!current) return json(404, { ok: false, message: "habat_record_not_found" });
+
+  const accessId = normalizeText(current.access_id);
+  if (!accessId) {
+    return json(409, { ok: false, message: "workforce_employee_link_not_ready" });
+  }
+
+  const employee = await resolveWorkforceEmployeeBySource(
+    db,
+    WORKFORCE_TENANT_ID,
+    accessId
+  );
+  if (!employee?.id) {
+    return json(409, { ok: false, message: "workforce_employee_not_linked" });
+  }
+
+  const date = normalizeText(current.attendance_date);
+  await assertPayrollSourceMutationAllowed(
+    db,
+    WORKFORCE_TENANT_ID,
+    employee.id,
+    date,
+    date
+  );
+
+  const now = nowIso();
+  const actorUid = normalizeText(requester.uid) || null;
+  const actorEmail = normalizeText(requester.email).toLowerCase() || null;
+  const staleStatements = buildPayrollStaleStatements(db, {
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId: employee.id,
+    fromDate: date,
+    toDate: date,
+    reason: "attendance_record_deleted",
+    now,
+  });
+
+  const deleteStatement = db
+    .prepare(`DELETE FROM habat_attendance_records WHERE id = ?`)
+    .bind(id);
+
+  const auditStatement = db.prepare(
+    `INSERT INTO workforce_audit_events (
+      id, tenant_id, actor_uid, actor_email, action, entity_type, entity_id,
+      before_json, after_json, metadata_json, created_at
+    ) VALUES (?, ?, ?, ?, 'workforce.attendance.delete', 'attendance_record', ?, ?, NULL, ?, ?)`
+  ).bind(
+    `wf_audit_${crypto.randomUUID()}`,
+    WORKFORCE_TENANT_ID,
+    actorUid,
+    actorEmail,
+    id,
+    JSON.stringify(current),
+    JSON.stringify({
+      source: "habat_v3_record_delete",
+      accessId,
+      attendanceDate: date,
+    }),
+    now
+  );
+
   try {
-    await writeAudit(db, requester, "manager_delete_record", "habat_attendance_record", id, current, null);
-    await db.prepare(`DELETE FROM habat_attendance_records WHERE id = ?`).bind(id).run();
+    await db.batch([
+      deleteStatement,
+      ...staleStatements,
+      auditStatement,
+    ]);
     return json(200, { ok: true });
   } catch (error) {
     console.error("[habat-v3] record delete failed", error);
     return json(500, { ok: false, message: "habat_record_delete_failed" });
   }
 }
-
 async function upsertDayOverride(db, request, requester) {
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
+
   const accessId = normalizeText(body.value?.accessId);
   const date = normalizeDate(body.value?.date);
   const type = normalizeText(body.value?.type);
-  const dayPortion = DAY_PORTIONS.has(normalizeText(body.value?.dayPortion)) ? normalizeText(body.value?.dayPortion) : "full_day";
+  const dayPortion = DAY_PORTIONS.has(normalizeText(body.value?.dayPortion))
+    ? normalizeText(body.value?.dayPortion)
+    : "full_day";
   const reason = normalizeText(body.value?.reason);
+
   if (!accessId || !date || !OVERRIDE_TYPES.has(type)) {
     return json(400, { ok: false, message: "habat_day_override_fields_required" });
   }
@@ -402,12 +509,10 @@ async function upsertDayOverride(db, request, requester) {
   const accessResult = await getAccessById(db, accessId);
   if (!accessResult.ok) return accessResult.response;
   const access = accessResult.row;
-  if (Number(access.is_active) !== 1) return json(409, { ok: false, message: "habat_inactive_access" });
-  if (Number(access.clock_enabled) !== 1) return json(409, { ok: false, message: "habat_clock_disabled_for_date" });
-  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
-  if (enrollmentDate && date < enrollmentDate) {
-    return json(409, { ok: false, message: "habat_date_before_enrollment" });
-  }
+
+  const employee = await resolveWorkforceEmployeeBySource(db, WORKFORCE_TENANT_ID, accessId);
+  if (!employee?.id) return json(409, { ok: false, message: "workforce_employee_not_linked" });
+  await assertPayrollSourceMutationAllowed(db, WORKFORCE_TENANT_ID, employee.id, date);
 
   const attendance = await db.prepare(
     `SELECT id FROM habat_attendance_records
@@ -415,48 +520,157 @@ async function upsertDayOverride(db, request, requester) {
   ).bind(date, accessId, access.email).first();
   if (attendance) return json(409, { ok: false, message: "habat_day_has_attendance_record" });
 
-  const current = await db.prepare(
-    `SELECT * FROM habat_attendance_day_overrides WHERE access_id = ? AND attendance_date = ? LIMIT 1`
-  ).bind(accessId, date).first();
-  const id = current?.id || `habat_override_${crypto.randomUUID()}`;
-  const now = nowIso();
+  const existingLeave = await db.prepare(
+    `SELECT id FROM workforce_leaves
+      WHERE tenant_id = ? AND employee_id = ? AND status = 'approved'
+        AND start_date <= ? AND end_date >= ?
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, employee.id, date, date).first();
+  const existingAbsence = await db.prepare(
+    `SELECT id FROM workforce_absences
+      WHERE tenant_id = ? AND employee_id = ? AND status = 'approved'
+        AND absence_date = ? LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, employee.id, date).first();
 
-  try {
-    await db.prepare(
-      `INSERT INTO habat_attendance_day_overrides (
-        id, access_id, attendance_date, override_type, day_portion, reason,
-        created_by_uid, created_by_email, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(access_id, attendance_date) DO UPDATE SET
-        override_type = excluded.override_type,
-        day_portion = excluded.day_portion,
-        reason = excluded.reason,
-        updated_at = excluded.updated_at`
-    ).bind(
-      id, accessId, date, type, dayPortion, reason || null,
-      normalizeText(requester.uid) || null, normalizeText(requester.email).toLowerCase() || null,
-      current?.created_at || now, now
-    ).run();
-    const next = await db.prepare(`SELECT * FROM habat_attendance_day_overrides WHERE access_id = ? AND attendance_date = ? LIMIT 1`).bind(accessId, date).first();
-    await writeAudit(db, requester, current ? "manager_update_day_override" : "manager_create_day_override", "habat_attendance_day_override", id, current, next);
-    return json(200, { ok: true, override: mapOverride(next) });
-  } catch (error) {
-    console.error("[habat-v3] override save failed", error);
-    return json(500, { ok: false, message: "habat_day_override_save_failed" });
+  if (existingLeave || existingAbsence) {
+    return json(409, { ok: false, message: "workforce_day_leave_absence_conflict" });
   }
+
+  const now = nowIso();
+  const actorUid = normalizeText(requester.uid) || null;
+  const actorEmail = normalizeText(requester.email).toLowerCase() || null;
+  const staleStatements = buildPayrollStaleStatements(db, {
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId: employee.id,
+    fromDate: date,
+    reason: type === "absence" ? "absence_changed" : "leave_changed",
+    now,
+  });
+
+  if (type === "emergency_leave") {
+    const id = `wf_leave_${crypto.randomUUID()}`;
+    const statements = [
+      db.prepare(
+        `INSERT INTO workforce_leaves (
+          id, tenant_id, employee_id, leave_type, duration_kind,
+          start_date, end_date, status, reason,
+          requested_by_uid, approved_by_uid, approved_by_email, approved_at,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, 'emergency', ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        id, WORKFORCE_TENANT_ID, employee.id, dayPortion,
+        date, date, reason || null, actorUid, actorUid, actorEmail, now, now, now
+      ),
+      ...staleStatements,
+      db.prepare(
+        `INSERT INTO workforce_audit_events (
+          id, tenant_id, actor_uid, actor_email, action, entity_type, entity_id,
+          before_json, after_json, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, 'workforce.leave.create', 'leave', ?, NULL, ?, ?, ?)`
+      ).bind(
+        `wf_audit_${crypto.randomUUID()}`,
+        WORKFORCE_TENANT_ID,
+        actorUid,
+        actorEmail,
+        id,
+        JSON.stringify({ id, employee_id: employee.id, leave_type: "emergency", duration_kind: dayPortion, start_date: date, end_date: date, status: "approved" }),
+        JSON.stringify({ source: "habat_v3_day_override_facade", accessId }),
+        now
+      ),
+    ];
+    await db.batch(statements);
+    return json(200, {
+      ok: true,
+      override: { id, accessId, attendanceDate: date, type: "leave", leaveType: "emergency", dayPortion, reason: reason || null, source: "workforce_leaves" },
+    });
+  }
+
+  const id = `wf_absence_${crypto.randomUUID()}`;
+  const statements = [
+    db.prepare(
+      `INSERT INTO workforce_absences (
+        id, tenant_id, employee_id, absence_date, day_portion, status,
+        reason, payroll_treatment, created_by_uid, created_by_email,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'approved', ?, 'attendance_policy', ?, ?, ?, ?)`
+    ).bind(id, WORKFORCE_TENANT_ID, employee.id, date, dayPortion, reason || null, actorUid, actorEmail, now, now),
+    ...staleStatements,
+    db.prepare(
+      `INSERT INTO workforce_audit_events (
+        id, tenant_id, actor_uid, actor_email, action, entity_type, entity_id,
+        before_json, after_json, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, 'workforce.absence.create', 'absence', ?, NULL, ?, ?, ?)`
+    ).bind(
+      `wf_audit_${crypto.randomUUID()}`,
+      WORKFORCE_TENANT_ID,
+      actorUid,
+      actorEmail,
+      id,
+      JSON.stringify({ id, employee_id: employee.id, absence_date: date, day_portion: dayPortion, status: "approved", payroll_treatment: "attendance_policy" }),
+      JSON.stringify({ source: "habat_v3_day_override_facade", accessId }),
+      now
+    ),
+  ];
+  await db.batch(statements);
+  return json(200, {
+    ok: true,
+    override: { id, accessId, attendanceDate: date, type: "absence", dayPortion, reason: reason || null, source: "workforce_absences" },
+  });
 }
 
 async function deleteDayOverride(db, requester, id) {
-  const current = await db.prepare(`SELECT * FROM habat_attendance_day_overrides WHERE id = ? LIMIT 1`).bind(id).first();
-  if (!current) return json(404, { ok: false, message: "habat_day_override_not_found" });
-  try {
-    await writeAudit(db, requester, "manager_delete_day_override", "habat_attendance_day_override", id, current, null);
-    await db.prepare(`DELETE FROM habat_attendance_day_overrides WHERE id = ?`).bind(id).run();
-    return json(200, { ok: true });
-  } catch (error) {
-    console.error("[habat-v3] override delete failed", error);
-    return json(500, { ok: false, message: "habat_day_override_delete_failed" });
-  }
+  const [leave, absence] = await Promise.all([
+    db.prepare(`SELECT * FROM workforce_leaves WHERE tenant_id = ? AND id = ? LIMIT 1`)
+      .bind(WORKFORCE_TENANT_ID, id).first(),
+    db.prepare(`SELECT * FROM workforce_absences WHERE tenant_id = ? AND id = ? LIMIT 1`)
+      .bind(WORKFORCE_TENANT_ID, id).first(),
+  ]);
+  const row = leave || absence;
+  if (!row) return json(404, { ok: false, message: "habat_day_override_not_found" });
+
+  const employeeId = normalizeText(row.employee_id);
+  const date = normalizeText(leave ? row.start_date : row.absence_date);
+  await assertPayrollSourceMutationAllowed(db, WORKFORCE_TENANT_ID, employeeId, date);
+
+  const now = nowIso();
+  const actorUid = normalizeText(requester.uid) || null;
+  const actorEmail = normalizeText(requester.email).toLowerCase() || null;
+  const staleStatements = buildPayrollStaleStatements(db, {
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId,
+    fromDate: date,
+    toDate: leave ? normalizeText(row.end_date) || date : date,
+    reason: leave ? "leave_cancelled" : "absence_cancelled",
+    now,
+  });
+
+  const update = leave
+    ? db.prepare(`UPDATE workforce_leaves SET status='cancelled', updated_at=? WHERE tenant_id=? AND id=? AND status='approved'`)
+        .bind(now, WORKFORCE_TENANT_ID, id)
+    : db.prepare(`UPDATE workforce_absences SET status='cancelled', updated_at=? WHERE tenant_id=? AND id=? AND status='approved'`)
+        .bind(now, WORKFORCE_TENANT_ID, id);
+
+  const audit = db.prepare(
+    `INSERT INTO workforce_audit_events (
+      id, tenant_id, actor_uid, actor_email, action, entity_type, entity_id,
+      before_json, after_json, metadata_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    `wf_audit_${crypto.randomUUID()}`,
+    WORKFORCE_TENANT_ID,
+    actorUid,
+    actorEmail,
+    leave ? "workforce.leave.cancel" : "workforce.absence.cancel",
+    leave ? "leave" : "absence",
+    id,
+    JSON.stringify(row),
+    JSON.stringify({ ...row, status: "cancelled", updated_at: now }),
+    JSON.stringify({ source: "habat_v3_day_override_facade" }),
+    now
+  );
+
+  await db.batch([update, ...staleStatements, audit]);
+  return json(200, { ok: true });
 }
 
 async function getSavedMonthlySummary(db, url, principal) {

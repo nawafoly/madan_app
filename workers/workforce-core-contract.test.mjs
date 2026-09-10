@@ -9,6 +9,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), "utf8");
 const core = read("workers/workforce-core.js");
 const adapter = read("workers/habat-workforce-adapter.js");
 const worker = read("workers/attendance-worker.js");
+const habatRuntime = read("workers/habat-runtime.js");
 const migration = read("workers/workforce-migrations/0001_workforce_core_foundation.sql");
 const client = read("client/src/features/workforce/workforceClient.ts");
 
@@ -29,14 +30,25 @@ test("tenant-specific legacy knowledge stays in the edge adapter", () => {
   assert.match(adapter, /handleWorkforceCoreRequest/);
 });
 
+test("Habbat attendance adapter resolves canonical access_id before legacy identity fallback", () => {
+  assert.match(adapter, /access_id = \?/);
+  assert.match(adapter, /access_id IS NULL OR trim\(access_id\) = ''/);
+  assert.match(adapter, /account_uid = \?/);
+  assert.match(adapter, /lower\(account_email\) = \?/);
+});
 test("attendance worker routes workforce before legacy Habbat handlers", () => {
-  const workforceIndex = worker.indexOf('/attendance/habat/workforce/');
-  const legacyIndex = worker.indexOf('return handleHabatAttendanceRequest(habatArgs)');
+  assert.match(worker, /handleHabatRequest/);
+
+  const workforceIndex = habatRuntime.indexOf('/attendance/habat/workforce/');
+  const legacyIndex = habatRuntime.indexOf('handleHabatAttendanceRequest(habatArgs)');
+
   assert.ok(workforceIndex >= 0, "workforce route is missing");
   assert.ok(legacyIndex >= 0, "legacy Habbat fallback is missing");
-  assert.ok(workforceIndex < legacyIndex, "workforce route must be evaluated before legacy fallback");
+  assert.ok(
+    workforceIndex < legacyIndex,
+    "workforce route must be evaluated before legacy fallback"
+  );
 });
-
 test("schema establishes tenant-scoped workforce domains", () => {
   const requiredTables = [
     "workforce_tenants",

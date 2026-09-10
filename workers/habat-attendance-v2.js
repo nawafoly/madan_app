@@ -1,5 +1,7 @@
 import { resolveWorkforceScheduleDay } from "./workforce-schedule-control.js";
+import { resolveWorkforceEmployeeBySource } from "./workforce-day-state.js";
 
+import { prepareAttendanceMutationGuard } from "./workforce-mutation-guard.js";
 const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);
 const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
 const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
@@ -262,7 +264,7 @@ async function resolvePrincipal(db, requester) {
 async function getContext(db, requester, principal) {
   const date = getRiyadhDateKey();
   const settings = await getSettings(db);
-  const record = await getTodayRecord(db, requester.uid);
+  const record = await getTodayRecord(db, requester.uid, principal.accessId);
   const shift = principal.accessId
     ? await resolveShiftForAccess(db, principal.accessId, date)
     : await getDefaultShift(db);
@@ -369,7 +371,21 @@ async function clockIn(db, request, requester, principal) {
   if (!uid) return forbidden("habat_clock_forbidden");
 
   const date = getRiyadhDateKey();
-  const existing = await getTodayRecord(db, uid);
+  const existing = await getTodayRecord(db, uid, principal.accessId);
+  // attendance_clockIn_guard_applied
+  const workforceGuard = principal.accessId
+    ? await prepareAttendanceMutationGuard({
+        db,
+        tenantId: "restaurant_tenant_habat_alwaraq",
+        sourceEmployeeId: principal.accessId,
+        attendanceDate: date,
+        currentRecord: existing,
+        mutation: "check_in",
+      })
+    : null;
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
   if (existing?.check_in_at) {
     return json(409, {
       ok: false,
@@ -470,7 +486,12 @@ async function clockIn(db, request, requester, principal) {
       ).run();
     }
 
-    const record = await getTodayRecord(db, uid);
+  // payroll_stale_after_clockIn
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
+
+    const record = await getTodayRecord(db, uid, principal.accessId);
     await writeAudit(db, requester, "check_in_v2", "habat_attendance_record", record?.id || id, existing || null, record);
     return json(200, { ok: true, record: mapRecord(record) });
   } catch (error) {
@@ -483,7 +504,21 @@ async function clockOut(db, request, requester, principal) {
   const uid = normalizeText(requester.uid);
   if (!uid) return forbidden("habat_clock_forbidden");
 
-  const existing = await getTodayRecord(db, uid);
+  const existing = await getTodayRecord(db, uid, principal.accessId);
+  // attendance_clockOut_guard_applied
+  const workforceGuard = principal.accessId && existing
+    ? await prepareAttendanceMutationGuard({
+        db,
+        tenantId: "restaurant_tenant_habat_alwaraq",
+        sourceEmployeeId: principal.accessId,
+        attendanceDate: existing.attendance_date || getRiyadhDateKey(),
+        currentRecord: existing,
+        mutation: "check_out",
+      })
+    : null;
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
   if (!existing?.check_in_at) {
     return json(409, { ok: false, message: "habat_check_in_required" });
   }
@@ -557,7 +592,12 @@ async function clockOut(db, request, requester, principal) {
       existing.id
     ).run();
 
-    const record = await getTodayRecord(db, uid);
+  // payroll_stale_after_clockOut
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
+
+    const record = await getTodayRecord(db, uid, principal.accessId);
     await writeAudit(db, requester, "check_out_v2", "habat_attendance_record", existing.id, existing, record);
     return json(200, { ok: true, record: mapRecord(record) });
   } catch (error) {
@@ -707,26 +747,35 @@ async function createShift(db, request, requester) {
 
   const id = `habat_shift_${crypto.randomUUID()}`;
   const now = nowIso();
+  const draft = {
+    id,
+    name: parsed.value.name,
+    start_time: parsed.value.startTime,
+    end_time: parsed.value.endTime,
+    grace_minutes: parsed.value.graceMinutes,
+    early_leave_tolerance_minutes: parsed.value.earlyLeaveToleranceMinutes,
+    working_days: parsed.value.workingDays.join(","),
+    is_active: 1,
+    created_at: now,
+    updated_at: now,
+  };
+
   try {
-    await db.prepare(
-      `INSERT INTO habat_attendance_shifts (
-        id, name, start_time, end_time, grace_minutes,
-        early_leave_tolerance_minutes, working_days, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
-    ).bind(
-      id,
-      parsed.value.name,
-      parsed.value.startTime,
-      parsed.value.endTime,
-      parsed.value.graceMinutes,
-      parsed.value.earlyLeaveToleranceMinutes,
-      parsed.value.workingDays.join(","),
-      now,
-      now
-    ).run();
+    await db.batch([
+      db.prepare(
+        `INSERT INTO habat_attendance_shifts (
+          id, name, start_time, end_time, grace_minutes,
+          early_leave_tolerance_minutes, working_days, is_active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+      ).bind(
+        id, draft.name, draft.start_time, draft.end_time,
+        draft.grace_minutes, draft.early_leave_tolerance_minutes,
+        draft.working_days, now, now
+      ),
+      buildWorkforceTemplateSyncStatement(db, draft),
+    ]);
 
     const row = await getShiftById(db, id);
-    await syncWorkforceTemplateFromHabatShift(db, row);
     await writeAudit(db, requester, "create_shift", "habat_attendance_shift", id, null, row);
     return json(200, { ok: true, shift: mapShift(row) });
   } catch (error) {
@@ -734,7 +783,6 @@ async function createShift(db, request, requester) {
     return json(500, { ok: false, message: "habat_shift_create_failed" });
   }
 }
-
 async function updateShift(db, request, requester, id) {
   const current = await getShiftById(db, id);
   if (!current) return json(404, { ok: false, message: "habat_shift_not_found" });
@@ -748,8 +796,7 @@ async function updateShift(db, request, requester, id) {
     graceMinutes: body.value?.graceMinutes ?? current.grace_minutes,
     earlyLeaveToleranceMinutes:
       body.value?.earlyLeaveToleranceMinutes ?? current.early_leave_tolerance_minutes,
-    workingDays:
-      body.value?.workingDays ?? parseWorkingDays(current.working_days),
+    workingDays: body.value?.workingDays ?? parseWorkingDays(current.working_days),
   });
   if (!parsed.ok) return parsed.response;
 
@@ -757,26 +804,41 @@ async function updateShift(db, request, requester, id) {
     ? Number(current.is_active) === 1
     : Boolean(body.value.isActive);
 
+  const workforceTemplateId = `wf_sched_${id}`;
+  if (await findLockedPayrollForTemplate(db, workforceTemplateId)) {
+    return json(409, { ok: false, message: "workforce_payroll_period_locked" });
+  }
+
+  const now = nowIso();
+  const draft = {
+    ...current,
+    name: parsed.value.name,
+    start_time: parsed.value.startTime,
+    end_time: parsed.value.endTime,
+    grace_minutes: parsed.value.graceMinutes,
+    early_leave_tolerance_minutes: parsed.value.earlyLeaveToleranceMinutes,
+    working_days: parsed.value.workingDays.join(","),
+    is_active: isActive ? 1 : 0,
+    updated_at: now,
+  };
+
   try {
-    await db.prepare(
-      `UPDATE habat_attendance_shifts
-       SET name = ?, start_time = ?, end_time = ?, grace_minutes = ?,
-           early_leave_tolerance_minutes = ?, working_days = ?, is_active = ?, updated_at = ?
-       WHERE id = ?`
-    ).bind(
-      parsed.value.name,
-      parsed.value.startTime,
-      parsed.value.endTime,
-      parsed.value.graceMinutes,
-      parsed.value.earlyLeaveToleranceMinutes,
-      parsed.value.workingDays.join(","),
-      isActive ? 1 : 0,
-      nowIso(),
-      id
-    ).run();
+    await db.batch([
+      db.prepare(
+        `UPDATE habat_attendance_shifts
+          SET name = ?, start_time = ?, end_time = ?, grace_minutes = ?,
+              early_leave_tolerance_minutes = ?, working_days = ?, is_active = ?, updated_at = ?
+          WHERE id = ?`
+      ).bind(
+        draft.name, draft.start_time, draft.end_time, draft.grace_minutes,
+        draft.early_leave_tolerance_minutes, draft.working_days,
+        draft.is_active, now, id
+      ),
+      buildWorkforceTemplateSyncStatement(db, draft),
+      buildTemplatePayrollStaleStatement(db, workforceTemplateId, now, "schedule_template_changed"),
+    ]);
 
     const next = await getShiftById(db, id);
-    await syncWorkforceTemplateFromHabatShift(db, next);
     await writeAudit(db, requester, "update_shift", "habat_attendance_shift", id, current, next);
     return json(200, { ok: true, shift: mapShift(next) });
   } catch (error) {
@@ -784,7 +846,6 @@ async function updateShift(db, request, requester, id) {
     return json(500, { ok: false, message: "habat_shift_update_failed" });
   }
 }
-
 async function deactivateShift(db, requester, id) {
   const current = await getShiftById(db, id);
   if (!current) return json(404, { ok: false, message: "habat_shift_not_found" });
@@ -792,12 +853,36 @@ async function deactivateShift(db, requester, id) {
     return json(409, { ok: false, message: "habat_default_shift_cannot_be_deleted" });
   }
 
+  const workforceTemplateId = `wf_sched_${id}`;
+  const activeAssignment = await db.prepare(
+    `SELECT id FROM workforce_schedule_assignments
+      WHERE tenant_id = ? AND template_id = ?
+        AND (effective_to IS NULL OR effective_to >= ?)
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, workforceTemplateId, getRiyadhDateKey()).first();
+
+  if (activeAssignment) {
+    return json(409, { ok: false, message: "workforce_schedule_template_in_use" });
+  }
+  if (await findLockedPayrollForTemplate(db, workforceTemplateId)) {
+    return json(409, { ok: false, message: "workforce_payroll_period_locked" });
+  }
+
+  const now = nowIso();
+  const draft = { ...current, is_active: 0, updated_at: now };
+
   try {
-    await db.prepare(
-      `UPDATE habat_attendance_shifts SET is_active = 0, updated_at = ? WHERE id = ?`
-    ).bind(nowIso(), id).run();
+    await db.batch([
+      db.prepare(
+        `UPDATE habat_attendance_shifts
+          SET is_active = 0, updated_at = ?
+          WHERE id = ?`
+      ).bind(now, id),
+      buildWorkforceTemplateSyncStatement(db, draft),
+      buildTemplatePayrollStaleStatement(db, workforceTemplateId, now, "schedule_template_deactivated"),
+    ]);
+
     const next = await getShiftById(db, id);
-    await syncWorkforceTemplateFromHabatShift(db, next);
     await writeAudit(db, requester, "deactivate_shift", "habat_attendance_shift", id, current, next);
     return json(200, { ok: true, shift: mapShift(next) });
   } catch (error) {
@@ -805,7 +890,6 @@ async function deactivateShift(db, requester, id) {
     return json(500, { ok: false, message: "habat_shift_update_failed" });
   }
 }
-
 async function listAssignments(db, url) {
   const accessId = normalizeText(url.searchParams.get("accessId"));
   const clauses = [];
@@ -850,54 +934,135 @@ async function assignShift(db, request, requester) {
     return json(400, { ok: false, message: "habat_assignment_fields_required" });
   }
 
-  const [access, shift] = await Promise.all([
+  const [access, shift, employee] = await Promise.all([
     db.prepare(`SELECT * FROM habat_attendance_access WHERE id = ? LIMIT 1`).bind(accessId).first(),
     getShiftById(db, shiftId),
+    resolveWorkforceEmployeeBySource(db, WORKFORCE_TENANT_ID, accessId),
   ]);
+
   if (!access) return json(404, { ok: false, message: "habat_access_not_found" });
   if (!shift || Number(shift.is_active) !== 1) {
     return json(404, { ok: false, message: "habat_shift_not_found" });
   }
+  if (!employee?.id) {
+    return json(409, { ok: false, message: "workforce_employee_not_linked" });
+  }
+
+  const startMonth = effectiveFrom.slice(0, 7);
+  const locked = await db.prepare(
+    `SELECT id FROM workforce_payroll_entries
+      WHERE tenant_id = ? AND employee_id = ?
+        AND month_key >= ?
+        AND status IN ('reviewed','approved','paid')
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, employee.id, startMonth).first();
+
+  if (locked) {
+    return json(409, { ok: false, message: "workforce_payroll_period_locked" });
+  }
 
   const previousEnd = shiftDateKey(effectiveFrom, -1);
   const id = `habat_assignment_${crypto.randomUUID()}`;
+  const workforceAssignmentId = `wf_asg_${id}`;
+  const now = nowIso();
+
+  const workingDays = parseWorkingDays(shift.working_days);
+  const days = {};
+  for (let day = 0; day <= 6; day += 1) {
+    days[String(day)] = workingDays.includes(day)
+      ? { kind: "work", templateId: `wf_sched_${shiftId}` }
+      : { kind: "rest" };
+  }
+  const restDays = [0,1,2,3,4,5,6].filter(day => !workingDays.includes(day));
+  const weekPattern = { version: 2, days, workingDays, restDays };
 
   try {
-    await db.prepare(
-      `UPDATE habat_attendance_shift_assignments
-       SET effective_to = ?
-       WHERE access_id = ?
-         AND effective_from < ?
-         AND (effective_to IS NULL OR effective_to >= ?)`
-    ).bind(previousEnd, accessId, effectiveFrom, effectiveFrom).run();
+    await db.batch([
+      db.prepare(
+        `UPDATE habat_attendance_shift_assignments
+          SET effective_to = ?
+          WHERE access_id = ?
+            AND effective_from < ?
+            AND (effective_to IS NULL OR effective_to >= ?)`
+      ).bind(previousEnd, accessId, effectiveFrom, effectiveFrom),
 
-    await db.prepare(
-      `DELETE FROM habat_attendance_shift_assignments
-       WHERE access_id = ? AND effective_from >= ?`
-    ).bind(accessId, effectiveFrom).run();
+      db.prepare(
+        `DELETE FROM habat_attendance_shift_assignments
+          WHERE access_id = ? AND effective_from >= ?`
+      ).bind(accessId, effectiveFrom),
 
-    await db.prepare(
-      `INSERT INTO habat_attendance_shift_assignments (
-        id, access_id, shift_id, effective_from, effective_to,
-        created_by_uid, created_by_email, created_at
-      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`
-    ).bind(
-      id,
-      accessId,
-      shiftId,
-      effectiveFrom,
-      normalizeText(requester.uid) || null,
-      normalizeText(requester.email).toLowerCase() || null,
-      nowIso()
-    ).run();
+      db.prepare(
+        `INSERT INTO habat_attendance_shift_assignments (
+          id, access_id, shift_id, effective_from, effective_to,
+          created_by_uid, created_by_email, created_at
+        ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`
+      ).bind(
+        id, accessId, shiftId, effectiveFrom,
+        normalizeText(requester.uid) || null,
+        normalizeText(requester.email).toLowerCase() || null,
+        now
+      ),
+
+      db.prepare(
+        `UPDATE workforce_schedule_assignments
+          SET effective_to = ?, updated_at = ?
+          WHERE tenant_id = ? AND employee_id = ?
+            AND effective_from < ?
+            AND (effective_to IS NULL OR effective_to >= ?)`
+      ).bind(previousEnd, now, WORKFORCE_TENANT_ID, employee.id, effectiveFrom, effectiveFrom),
+
+      db.prepare(
+        `DELETE FROM workforce_schedule_assignments
+          WHERE tenant_id = ? AND employee_id = ? AND effective_from >= ?`
+      ).bind(WORKFORCE_TENANT_ID, employee.id, effectiveFrom),
+
+      db.prepare(
+        `INSERT INTO workforce_schedule_assignments (
+          id, tenant_id, employee_id, template_id, effective_from, effective_to,
+          weekly_rest_weekday, week_pattern_json, reason, operation_id,
+          created_by_uid, created_by_email, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'legacy_habat_assignment', ?, ?, ?, ?, ?)`
+      ).bind(
+        workforceAssignmentId,
+        WORKFORCE_TENANT_ID,
+        employee.id,
+        `wf_sched_${shiftId}`,
+        effectiveFrom,
+        restDays.length === 1 ? restDays[0] : null,
+        JSON.stringify(weekPattern),
+        `legacy_habat_assignment:${id}`,
+        normalizeText(requester.uid) || null,
+        normalizeText(requester.email).toLowerCase() || null,
+        now,
+        now
+      ),
+
+      db.prepare(
+        `UPDATE workforce_payroll_entries
+          SET calculation_snapshot_json =
+            CASE
+              WHEN calculation_snapshot_json IS NULL OR json_valid(calculation_snapshot_json)=0
+                THEN json_object('stage','stale','staleAt',?,'staleReason','schedule_assignment_changed')
+              ELSE json_set(
+                calculation_snapshot_json,
+                '$.stage','stale',
+                '$.staleAt',?,
+                '$.staleReason','schedule_assignment_changed'
+              )
+            END,
+            updated_at = ?
+          WHERE tenant_id = ? AND employee_id = ?
+            AND month_key >= ? AND status = 'draft'`
+      ).bind(now, now, now, WORKFORCE_TENANT_ID, employee.id, startMonth),
+    ]);
 
     const row = await db.prepare(
       `SELECT a.*, s.name AS shift_name, s.start_time, s.end_time,
               x.email, x.display_name
-       FROM habat_attendance_shift_assignments a
-       JOIN habat_attendance_shifts s ON s.id = a.shift_id
-       JOIN habat_attendance_access x ON x.id = a.access_id
-       WHERE a.id = ? LIMIT 1`
+        FROM habat_attendance_shift_assignments a
+        JOIN habat_attendance_shifts s ON s.id = a.shift_id
+        JOIN habat_attendance_access x ON x.id = a.access_id
+        WHERE a.id = ? LIMIT 1`
     ).bind(id).first();
 
     await writeAudit(db, requester, "assign_shift", "habat_attendance_shift_assignment", id, null, row);
@@ -907,7 +1072,6 @@ async function assignShift(db, request, requester) {
     return json(500, { ok: false, message: "habat_assignment_create_failed" });
   }
 }
-
 async function listRecords(db, url) {
   const to = normalizeDateKey(url.searchParams.get("to")) || getRiyadhDateKey();
   const from = normalizeDateKey(url.searchParams.get("from")) || shiftDateKey(to, -30);
@@ -957,6 +1121,22 @@ async function correctRecord(db, request, requester, id) {
     `SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`
   ).bind(id).first();
   if (!current) return json(404, { ok: false, message: "habat_record_not_found" });
+
+  // attendance_correctRecord_guard_applied
+  const correctionSourceId = normalizeText(current.access_id);
+  const correctionGuard = correctionSourceId
+    ? await prepareAttendanceMutationGuard({
+        db,
+        tenantId: "restaurant_tenant_habat_alwaraq",
+        sourceEmployeeId: correctionSourceId,
+        attendanceDate: normalizeText(current.attendance_date),
+        currentRecord: current,
+        mutation: "correction",
+      })
+    : null;
+  if (correctionGuard?.staleStatements?.length) {
+    await db.batch(correctionGuard.staleStatements);
+  }
 
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
@@ -1017,6 +1197,11 @@ async function correctRecord(db, request, requester, id) {
       nowIso(),
       id
     ).run();
+
+  // payroll_stale_after_correctRecord
+  if (correctionGuard?.staleStatements?.length) {
+    await db.batch(correctionGuard.staleStatements);
+  }
 
     const next = await db.prepare(
       `SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`
@@ -1260,45 +1445,85 @@ function makeWorkforceShiftFromResolved(schedule, dateKey) {
   };
 }
 
-async function syncWorkforceTemplateFromHabatShift(db, shift) {
+function buildWorkforceTemplateSyncStatement(db, shift) {
   const legacyShiftId = normalizeText(shift?.id);
-  if (!legacyShiftId) return;
+  if (!legacyShiftId) throw new Error("habat_shift_id_required");
 
   const workforceTemplateId = `wf_sched_${legacyShiftId}`;
   const now = nowIso();
-  try {
-    await db.prepare(
-      `INSERT INTO workforce_schedule_templates (
-         id, tenant_id, name, start_time, end_time, grace_minutes,
-         early_leave_tolerance_minutes, working_days_json, is_active,
-         created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         start_time = excluded.start_time,
-         end_time = excluded.end_time,
-         grace_minutes = excluded.grace_minutes,
-         early_leave_tolerance_minutes = excluded.early_leave_tolerance_minutes,
-         is_active = excluded.is_active,
-         updated_at = excluded.updated_at`
-    ).bind(
-      workforceTemplateId,
-      WORKFORCE_TENANT_ID,
-      normalizeText(shift.name),
-      normalizeTime(shift.start_time),
-      normalizeTime(shift.end_time),
-      Number(shift.grace_minutes || 0),
-      Number(shift.early_leave_tolerance_minutes || 0),
-      JSON.stringify([0, 1, 2, 3, 4, 5, 6]),
-      Number(shift.is_active) === 1 ? 1 : 0,
-      normalizeText(shift.created_at) || now,
-      now
-    ).run();
-  } catch (error) {
-    console.warn("[habat-v2] workforce schedule template sync skipped", error);
-  }
+  return db.prepare(
+    `INSERT INTO workforce_schedule_templates (
+      id, tenant_id, name, start_time, end_time, grace_minutes,
+      early_leave_tolerance_minutes, working_days_json, is_active,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      start_time = excluded.start_time,
+      end_time = excluded.end_time,
+      grace_minutes = excluded.grace_minutes,
+      early_leave_tolerance_minutes = excluded.early_leave_tolerance_minutes,
+      is_active = excluded.is_active,
+      updated_at = excluded.updated_at`
+  ).bind(
+    workforceTemplateId,
+    WORKFORCE_TENANT_ID,
+    normalizeText(shift.name),
+    normalizeTime(shift.start_time),
+    normalizeTime(shift.end_time),
+    Number(shift.grace_minutes || 0),
+    Number(shift.early_leave_tolerance_minutes || 0),
+    JSON.stringify([0, 1, 2, 3, 4, 5, 6]),
+    Number(shift.is_active) === 1 ? 1 : 0,
+    normalizeText(shift.created_at) || now,
+    now
+  );
 }
 
+async function findLockedPayrollForTemplate(db, workforceTemplateId) {
+  return db.prepare(
+    `SELECT pe.id
+      FROM workforce_payroll_entries pe
+      JOIN workforce_schedule_assignments a
+        ON a.tenant_id = pe.tenant_id
+        AND a.employee_id = pe.employee_id
+      WHERE pe.tenant_id = ?
+        AND a.template_id = ?
+        AND a.effective_from <= pe.month_key || '-31'
+        AND (a.effective_to IS NULL OR a.effective_to >= pe.month_key || '-01')
+        AND pe.status IN ('reviewed','approved','paid')
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, workforceTemplateId).first();
+}
+
+function buildTemplatePayrollStaleStatement(db, workforceTemplateId, now, reason) {
+  return db.prepare(
+    `UPDATE workforce_payroll_entries
+      SET calculation_snapshot_json =
+        CASE
+          WHEN calculation_snapshot_json IS NULL OR json_valid(calculation_snapshot_json)=0
+            THEN json_object('stage','stale','staleAt',?,'staleReason',?)
+          ELSE json_set(
+            calculation_snapshot_json,
+            '$.stage','stale',
+            '$.staleAt',?,
+            '$.staleReason',?
+          )
+        END,
+        updated_at = ?
+      WHERE tenant_id = ?
+        AND status = 'draft'
+        AND EXISTS (
+          SELECT 1
+          FROM workforce_schedule_assignments a
+          WHERE a.tenant_id = workforce_payroll_entries.tenant_id
+            AND a.employee_id = workforce_payroll_entries.employee_id
+            AND a.template_id = ?
+            AND a.effective_from <= workforce_payroll_entries.month_key || '-31'
+            AND (a.effective_to IS NULL OR a.effective_to >= workforce_payroll_entries.month_key || '-01')
+        )`
+  ).bind(now, reason, now, reason, now, WORKFORCE_TENANT_ID, workforceTemplateId);
+}
 function weekdayFromDateKey(dateKey) {
   const [year, month, day] = String(dateKey).split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
@@ -1322,304 +1547,38 @@ async function getShiftById(db, id) {
   ).bind(id).first();
 }
 
-async function getTodayRecord(db, uid) {
+async function getTodayRecord(db, uid, accessId = "") {
   const normalizedUid = normalizeText(uid);
-  if (!normalizedUid) return null;
-  return db.prepare(
-    `SELECT * FROM habat_attendance_records
-     WHERE account_uid = ? AND attendance_date = ?
-     LIMIT 1`
-  ).bind(normalizedUid, getRiyadhDateKey()).first();
-}
-
-function parseShiftInput(value) {
-  const name = normalizeText(value?.name);
-  const startTime = normalizeTime(value?.startTime);
-  const endTime = normalizeTime(value?.endTime);
-  const graceMinutes = clampInteger(value?.graceMinutes, 0, 240, 10);
-  const earlyLeaveToleranceMinutes = clampInteger(
-    value?.earlyLeaveToleranceMinutes,
-    0,
-    240,
-    0
-  );
-  const workingDays = normalizeWorkingDays(value?.workingDays);
-
-  if (!name) return { ok: false, response: json(400, { ok: false, message: "habat_shift_name_required" }) };
-  if (!startTime || !endTime) {
-    return { ok: false, response: json(400, { ok: false, message: "habat_invalid_shift_time" }) };
-  }
-  if (!workingDays.length) {
-    return { ok: false, response: json(400, { ok: false, message: "habat_working_days_required" }) };
-  }
-
-  return {
-    ok: true,
-    value: {
-      name,
-      startTime,
-      endTime,
-      graceMinutes,
-      earlyLeaveToleranceMinutes,
-      workingDays,
-    },
-  };
-}
-
-function buildScheduleWindow(dateKey, shift) {
-  const startTime = normalizeTime(shift?.start_time) || "09:00";
-  const endTime = normalizeTime(shift?.end_time) || "17:00";
-  const start = new Date(`${dateKey}T${startTime}:00+03:00`);
-  let end = new Date(`${dateKey}T${endTime}:00+03:00`);
-  if (end.getTime() <= start.getTime()) {
-    end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return { start, end };
-}
-
-function isWorkingDay(dateKey, shift) {
-  const days = parseWorkingDays(shift?.working_days);
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getUTCDay();
-  return days.includes(weekday);
-}
-
-function calculateAttendanceMetrics({ checkInAt, checkOutAt, shift, schedule }) {
-  const checkIn = checkInAt ? new Date(checkInAt) : null;
-  const checkOut = checkOutAt ? new Date(checkOutAt) : null;
-  const grace = Number(shift?.grace_minutes || 0);
-  const earlyTolerance = Number(shift?.early_leave_tolerance_minutes || 0);
-
-  const lateMinutes = checkIn && schedule
-    ? Math.max(0, Math.floor((checkIn.getTime() - schedule.start.getTime()) / 60000))
-    : 0;
-  const earlyLeaveMinutes = checkOut && schedule
-    ? Math.max(0, Math.floor((schedule.end.getTime() - checkOut.getTime()) / 60000))
-    : 0;
-  const workedMinutes = checkIn && checkOut
-    ? Math.max(0, Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000))
-    : null;
-  const late = lateMinutes > grace;
-  const early = earlyLeaveMinutes > earlyTolerance;
-
-  return {
-    lateMinutes,
-    earlyLeaveMinutes,
-    workedMinutes,
-    status: late && early
-      ? "late_early_leave"
-      : late
-        ? "late"
-        : early
-          ? "early_leave"
-          : "present",
-  };
-}
-
-function validateClockLocation(settings, value) {
-  const required = Number(settings?.location_required) === 1;
-  const latitude = normalizeNullableNumber(value?.latitude);
-  const longitude = normalizeNullableNumber(value?.longitude);
-  const accuracyM = normalizeNullableNumber(value?.accuracyM);
-
-  if (required && (latitude === null || longitude === null)) {
-    return {
-      ok: false,
-      response: json(400, { ok: false, message: "habat_location_required" }),
-    };
-  }
-
-  if (latitude !== null && (latitude < -90 || latitude > 90)) {
-    return { ok: false, response: json(400, { ok: false, message: "habat_invalid_latitude" }) };
-  }
-  if (longitude !== null && (longitude < -180 || longitude > 180)) {
-    return { ok: false, response: json(400, { ok: false, message: "habat_invalid_longitude" }) };
-  }
-
-  const centerLat = normalizeNullableNumber(settings?.latitude);
-  const centerLng = normalizeNullableNumber(settings?.longitude);
-  const maxAccuracy = Number(settings?.max_accuracy_m || 150);
-  const radius = Number(settings?.radius_m || 100);
-
-  if (required && (centerLat === null || centerLng === null)) {
-    return {
-      ok: false,
-      response: json(503, { ok: false, message: "habat_location_not_configured" }),
-    };
-  }
-  if (required && (accuracyM === null || accuracyM < 0 || accuracyM > maxAccuracy)) {
-    return {
-      ok: false,
-      response: json(422, {
-        ok: false,
-        message: "habat_location_accuracy_too_low",
-        maxAccuracyM: maxAccuracy,
-        accuracyM,
-      }),
-    };
-  }
-
-  let distanceM = null;
-  if (
-    latitude !== null &&
-    longitude !== null &&
-    centerLat !== null &&
-    centerLng !== null
-  ) {
-    distanceM = haversineMeters(latitude, longitude, centerLat, centerLng);
-    const accuracyToleranceM = getBoundedGeofenceAccuracyToleranceM(radius, accuracyM);
-    if (required && distanceM > radius + accuracyToleranceM) {
-      return {
-        ok: false,
-        response: json(403, {
-          ok: false,
-          message: "habat_outside_location_range",
-          distanceM: Math.round(distanceM),
-          radiusM: radius,
-        }),
-      };
-    }
-  }
-
-  return {
-    ok: true,
-    latitude,
-    longitude,
-    accuracyM,
-    distanceM: distanceM === null ? null : Math.round(distanceM * 10) / 10,
-  };
-}
-
-function getBoundedGeofenceAccuracyToleranceM(radiusM, accuracyM) {
-  if (!Number.isFinite(radiusM) || radiusM <= 0 || !Number.isFinite(accuracyM) || accuracyM <= 0) {
-    return 0;
-  }
-
-  return Math.min(
-    HABAT_MAX_GEOFENCE_ACCURACY_TOLERANCE_M,
-    radiusM * HABAT_MAX_GEOFENCE_TOLERANCE_RADIUS_RATIO,
-    accuracyM * HABAT_GEOFENCE_ACCURACY_TOLERANCE_RATIO
-  );
-}
-
-function haversineMeters(lat1, lon1, lat2, lon2) {
-  const radius = 6371000;
-  const toRadians = degree => (degree * Math.PI) / 180;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) ** 2;
-  return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function mapPrincipal(principal) {
-  return {
-    uid: principal.uid || null,
-    email: principal.email || null,
-    displayName: principal.displayName || null,
-    accessLevel: principal.accessLevel,
-    canManage: Boolean(principal.canManage),
-    canClock: Boolean(principal.canClock),
-    bootstrapOwner: Boolean(principal.bootstrapOwner),
-    accessId: principal.accessId || null,
-  };
-}
-
-function mapShift(row) {
-  if (!row) return null;
-  return {
-    id: normalizeText(row.id),
-    name: normalizeText(row.name),
-    startTime: normalizeTime(row.start_time),
-    endTime: normalizeTime(row.end_time),
-    graceMinutes: Number(row.grace_minutes || 0),
-    earlyLeaveToleranceMinutes: Number(row.early_leave_tolerance_minutes || 0),
-    workingDays: parseWorkingDays(row.working_days),
-    isActive: Number(row.is_active) === 1,
-  };
-}
-
-function mapAssignment(row) {
-  if (!row) return null;
-  return {
-    id: normalizeText(row.id),
-    accessId: normalizeText(row.access_id),
-    shiftId: normalizeText(row.shift_id),
-    effectiveFrom: normalizeText(row.effective_from),
-    effectiveTo: normalizeText(row.effective_to) || null,
-    shiftName: normalizeText(row.shift_name) || null,
-    startTime: normalizeTime(row.start_time) || null,
-    endTime: normalizeTime(row.end_time) || null,
-    email: normalizeText(row.email).toLowerCase() || null,
-    displayName: normalizeText(row.display_name) || null,
-  };
-}
-
-function mapSettings(row) {
-  return {
-    timezone: normalizeText(row?.timezone) || "Asia/Riyadh",
-    locationRequired: Number(row?.location_required) === 1,
-    latitude: normalizeNullableNumber(row?.latitude),
-    longitude: normalizeNullableNumber(row?.longitude),
-    radiusM: Number(row?.radius_m || 100),
-    maxAccuracyM: Number(row?.max_accuracy_m || 150),
-    updatedAt: normalizeText(row?.updated_at) || null,
-  };
-}
-
-function mapPublicSettings(row) {
-  return {
-    timezone: normalizeText(row?.timezone) || "Asia/Riyadh",
-    locationRequired: Number(row?.location_required) === 1,
-    radiusM: Number(row?.radius_m || 100),
-    maxAccuracyM: Number(row?.max_accuracy_m || 150),
-    locationConfigured:
-      normalizeNullableNumber(row?.latitude) !== null &&
-      normalizeNullableNumber(row?.longitude) !== null,
-  };
-}
-
-function mapRecord(row) {
-  if (!row) return null;
-  return {
-    id: normalizeText(row.id),
-    accessId: normalizeText(row.access_id) || null,
-    accountUid: normalizeText(row.account_uid),
-    accountEmail: normalizeText(row.account_email).toLowerCase() || null,
-    displayName: normalizeText(row.display_name) || null,
-    attendanceDate: normalizeText(row.attendance_date),
-    checkInAt: normalizeText(row.check_in_at) || null,
-    checkOutAt: normalizeText(row.check_out_at) || null,
-    shiftId: normalizeText(row.shift_id) || null,
-    scheduledStartAt: normalizeText(row.scheduled_start_at) || null,
-    scheduledEndAt: normalizeText(row.scheduled_end_at) || null,
-    attendanceStatus: normalizeText(row.attendance_status) || null,
-    lateMinutes: Number(row.late_minutes || 0),
-    earlyLeaveMinutes: Number(row.early_leave_minutes || 0),
-    workedMinutes:
-      row.worked_minutes === null || row.worked_minutes === undefined
-        ? null
-        : Number(row.worked_minutes),
-    checkInLocation: mapClockLocation(row, "check_in"),
-    checkOutLocation: mapClockLocation(row, "check_out"),
-    notes: normalizeText(row.notes) || null,
-    createdAt: normalizeText(row.created_at) || null,
-    updatedAt: normalizeText(row.updated_at) || null,
-  };
-}
-
-function mapClockLocation(row, prefix) {
-  const latitude = normalizeNullableNumber(row?.[`${prefix}_latitude`]);
-  const longitude = normalizeNullableNumber(row?.[`${prefix}_longitude`]);
-  const accuracyM = normalizeNullableNumber(row?.[`${prefix}_accuracy_m`]);
-  const distanceM = normalizeNullableNumber(row?.[`${prefix}_distance_m`]);
-  if (latitude === null && longitude === null && accuracyM === null && distanceM === null) {
+  const normalizedAccessId = normalizeText(accessId);
+  if (!normalizedUid && !normalizedAccessId) return null;
+  try {
+    return await db
+      .prepare(
+        `SELECT * FROM habat_attendance_records
+         WHERE attendance_date = ?
+           AND (
+             access_id = ?
+             OR (
+               (access_id IS NULL OR trim(access_id) = '')
+               AND ? <> ''
+               AND account_uid = ?
+             )
+           )
+         ORDER BY CASE WHEN access_id = ? THEN 0 ELSE 1 END, created_at ASC
+         LIMIT 1`
+      )
+      .bind(
+        getRiyadhDateKey(),
+        normalizedAccessId,
+        normalizedUid,
+        normalizedUid,
+        normalizedAccessId
+      )
+      .first();
+  } catch (error) {
+    console.error("[habat-v2] today lookup failed", error);
     return null;
   }
-  return { latitude, longitude, accuracyM, distanceM };
 }
 
 async function writeAudit(db, requester, action, entityType, entityId, before, after) {

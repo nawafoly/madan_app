@@ -1,4 +1,4 @@
-import { resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+import { resolveWorkforceDayRange, summarizeWorkforceDays } from "./workforce-day-state.js";
 
 export async function handleWorkforceAttendanceOperationsRequest({
   request,
@@ -59,79 +59,53 @@ export async function handleWorkforceAttendanceOperationsRequest({
     return json(501, { ok: false, message: "workforce_attendance_source_unavailable" });
   }
 
-  const { fromDate, lastDate, nextMonth } = monthBounds(monthKey);
+  const { fromDate, lastDate } = monthBounds(monthKey);
+  const sourceRows = await sourceAdapter.listAttendanceMonth(clean(link.source_employee_id), monthKey);
+  const canonicalDays = await resolveWorkforceDayRange({
+    db,
+    tenantId: tenant.id,
+    employeeId,
+    from: fromDate,
+    to: lastDate,
+    sourceRows,
+  });
 
-  const [sourceRows, absencesResult, schedules] = await Promise.all([
-    sourceAdapter.listAttendanceMonth(clean(link.source_employee_id), monthKey),
-    db.prepare(`SELECT * FROM workforce_absences
-                 WHERE tenant_id = ? AND employee_id = ?
-                   AND absence_date >= ? AND absence_date < ?
-                 ORDER BY absence_date ASC`)
-      .bind(tenant.id, employeeId, fromDate, nextMonth)
-      .all(),
-    resolveWorkforceScheduleRange(db, tenant.id, employeeId, fromDate, lastDate),
-  ]);
-
-  const absenceByDate = new Map((absencesResult?.results || []).map(row => [clean(row.absence_date), row]));
-  const scheduleByDate = new Map((schedules || []).map(schedule => [clean(schedule.date), schedule]));
-  const days = [];
-  const seen = new Set();
-  const today = currentDateRiyadh();
-
-  for (const raw of Array.isArray(sourceRows) ? sourceRows : []) {
-    const date = clean(raw.date || raw.attendanceDate || raw.attendance_date);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < fromDate || date >= nextMonth) continue;
-    seen.add(date);
-    const resolved = resolveAttendanceOperationDay(raw, scheduleByDate.get(date), today);
-    const explicitAbsence = absenceByDate.get(date) || null;
-
-    days.push({
-      date,
-      ...resolved,
-      explicitAbsence: explicitAbsence ? {
-        id: explicitAbsence.id,
-        dayPortion: explicitAbsence.day_portion,
-        status: explicitAbsence.status,
-        payrollTreatment: explicitAbsence.payroll_treatment,
-        reason: explicitAbsence.reason || null,
-      } : null,
-    });
-  }
-
-  for (const [date, absence] of absenceByDate) {
-    if (seen.has(date)) continue;
-    days.push({
-      date,
-      checkInAt: null,
-      checkOutAt: null,
-      status: "absence",
-      lateMinutes: 0,
-      earlyLeaveMinutes: 0,
-      workedMinutes: null,
-      missingPunch: false,
-      explicitAbsence: {
-        id: absence.id,
-        dayPortion: absence.day_portion,
-        status: absence.status,
-        payrollTreatment: absence.payroll_treatment,
-        reason: absence.reason || null,
-      },
-    });
-  }
-
-  days.sort((a, b) => a.date.localeCompare(b.date));
-  const summary = summarize(days);
+  const days = canonicalDays.map(day => ({
+    date: day.date,
+    state: day.state,
+    checkInAt: day.checkInAt,
+    checkOutAt: day.checkOutAt,
+    status: day.state,
+    lateMinutes: day.lateMinutes,
+    earlyLeaveMinutes: day.earlyLeaveMinutes,
+    workedMinutes: day.workedMinutes,
+    missingPunch: day.missingPunch,
+    schedule: day.schedule,
+    scheduledMinutes: day.scheduledMinutes,
+    expectedAttendanceMinutes: day.expectedAttendanceMinutes,
+    paidExcusedMinutes: day.paidExcusedMinutes,
+    leaveRefs: day.leaveRefs,
+    explicitAbsence: day.absence ? {
+      id: day.absence.id,
+      dayPortion: day.absence.day_portion,
+      status: day.absence.status,
+      payrollTreatment: day.absence.payroll_treatment,
+      reason: day.absence.reason || null,
+    } : null,
+    conflicts: day.conflicts,
+    employmentEligible: day.employmentEligible,
+  }));
 
   return json(200, {
     ok: true,
     monthKey,
     readiness: {
-      ready: true,
-      status: "confirmed",
+      ready: !days.some(day => day.state === "conflict"),
+      status: days.some(day => day.state === "conflict") ? "conflict" : "confirmed",
       sourceType: clean(link.source_type),
       sourceEmployeeId: clean(link.source_employee_id),
     },
-    summary,
+    summary: summarizeWorkforceDays(canonicalDays),
     days,
   });
 }

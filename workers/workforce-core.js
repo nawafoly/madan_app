@@ -7,6 +7,10 @@ import { handleWorkforcePayrollReadinessRequest } from "./workforce-payroll-read
 import { handleWorkforcePayrollLifecycleRequest } from "./workforce-payroll-lifecycle.js";
 import { handleWorkforcePayrollReportsRequest } from "./workforce-payroll-reports.js";
 
+import {
+  prepareAbsenceMutationGuard,
+  preparePayrollUnlockGuard,
+} from "./workforce-mutation-guard.js";
 const PAYROLL_DEDUCTION_METHODS = new Set(["hourly", "daily"]);
 const ATTENDANCE_PAYROLL_MODES = new Set(["required", "exempt"]);
 const LEAVE_TYPES = new Set([
@@ -134,7 +138,9 @@ export async function handleWorkforceCoreRequest({
   const employeePayrollSettingsMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/payroll-settings$/);
   const employeeLeavesMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/leaves$/);
   const employeeAbsencesMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/absences$/);
-  const employeeAssignmentsMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/schedule-assignments$/);
+
+  const employeeAbsenceDetailMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/absences\/([^/]+)$/);
+const employeeAssignmentsMatch = pathname.match(/^\/v1\/employees\/([^/]+)\/schedule-assignments$/);
 
   if (pathname === "/v1/bootstrap/sync-source") {
     if (request.method !== "POST") return methodNotAllowed(["POST"]);
@@ -211,9 +217,20 @@ export async function handleWorkforceCoreRequest({
     }
     if (request.method === "POST") {
       requireManager(principal);
-      return createEmployeeAbsence(db, tenant.id, employee.id, request, principal);
+      return createEmployeeAbsence(db, tenant.id, employee.id, request, principal, sourceAdapter);
     }
     return methodNotAllowed(["GET", "POST"]);
+  }
+
+  if (employeeAbsenceDetailMatch) {
+    const employeeId = decodeURIComponent(employeeAbsenceDetailMatch[1]);
+    const absenceId = decodeURIComponent(employeeAbsenceDetailMatch[2]);
+    const employee = await requireEmployeeAccess(db, tenant.id, employeeId, principal);
+    requireManager(principal);
+    if (request.method === "DELETE") {
+      return cancelEmployeeAbsence(db, tenant.id, employee.id, absenceId, principal);
+    }
+    return methodNotAllowed(["DELETE"]);
   }
 
   if (pathname === "/v1/schedule/templates") {
@@ -913,7 +930,7 @@ async function listEmployeeAbsences(db, tenantId, employeeId) {
   return json(200, { ok: true, absences: result?.results || [] });
 }
 
-async function createEmployeeAbsence(db, tenantId, employeeId, request, principal) {
+async function createEmployeeAbsence(db, tenantId, employeeId, request, principal, sourceAdapter) {
   const body = await readJson(request);
   const absenceDate = clean(body.absenceDate);
   const dayPortion = clean(body.dayPortion || "full_day");
@@ -924,40 +941,111 @@ async function createEmployeeAbsence(db, tenantId, employeeId, request, principa
     return json(400, { ok: false, message: "workforce_absence_payroll_treatment_invalid" });
   }
 
+  const guard = await prepareAbsenceMutationGuard({
+    db,
+    tenantId,
+    employeeId,
+    sourceAdapter,
+    absenceDate,
+    dayPortion,
+  });
+
   const absenceId = id("wf_absence");
   const now = nowIso();
-  try {
-    await db
-      .prepare(
-        `INSERT INTO workforce_absences (
-           id, tenant_id, employee_id, absence_date, day_portion, status,
-           reason, payroll_treatment, created_by_uid, created_by_email,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?)`
-      )
+  const after = {
+    id: absenceId,
+    tenant_id: tenantId,
+    employee_id: employeeId,
+    absence_date: absenceDate,
+    day_portion: dayPortion,
+    status: "approved",
+    reason: nullable(body.reason),
+    payroll_treatment: payrollTreatment,
+    created_by_uid: principal.uid || null,
+    created_by_email: principal.email || null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const statements = [
+    db.prepare(`INSERT INTO workforce_absences (
+       id, tenant_id, employee_id, absence_date, day_portion, status,
+       reason, payroll_treatment, created_by_uid, created_by_email,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?)`)
       .bind(
         absenceId,
         tenantId,
         employeeId,
         absenceDate,
         dayPortion,
-        nullable(body.reason),
+        after.reason,
         payrollTreatment,
         principal.uid || null,
         principal.email || null,
         now,
         now
-      )
-      .run();
+      ),
+    ...guard.staleStatements,
+    buildAuditStatement(db, tenantId, principal, "workforce.absence.create", "absence", absenceId, null, after),
+  ];
+
+  try {
+    await runWorkforceBatch(db, statements);
   } catch (error) {
     if (String(error?.message || error).toLowerCase().includes("unique")) {
       return json(409, { ok: false, message: "workforce_absence_already_exists" });
     }
     throw error;
   }
+
   const row = await db.prepare(`SELECT * FROM workforce_absences WHERE tenant_id = ? AND id = ?`).bind(tenantId, absenceId).first();
-  await audit(db, tenantId, principal, "workforce.absence.create", "absence", absenceId, null, row);
   return json(201, { ok: true, absence: row });
+}
+
+async function cancelEmployeeAbsence(db, tenantId, employeeId, absenceId, principal) {
+  const current = await db
+    .prepare(`SELECT * FROM workforce_absences
+                WHERE tenant_id = ? AND employee_id = ? AND id = ?
+                LIMIT 1`)
+    .bind(tenantId, employeeId, absenceId)
+    .first();
+
+  if (!current) throw httpError(404, "workforce_absence_not_found");
+  if (clean(current.status) === "cancelled") {
+    return json(200, { ok: true, idempotent: true, absence: current });
+  }
+  if (clean(current.status) !== "approved") {
+    throw httpError(409, "workforce_absence_not_cancellable");
+  }
+
+  const staleStatements = await preparePayrollUnlockGuard({
+    db,
+    tenantId,
+    employeeId,
+    fromDate: current.absence_date,
+    toDate: current.absence_date,
+    reason: "absence_cancelled",
+  });
+
+  const now = nowIso();
+  const after = { ...current, status: "cancelled", updated_at: now };
+  const statements = [
+    db.prepare(`UPDATE workforce_absences
+                    SET status = 'cancelled', updated_at = ?
+                  WHERE tenant_id = ? AND employee_id = ? AND id = ?`)
+      .bind(now, tenantId, employeeId, absenceId),
+    ...staleStatements,
+    buildAuditStatement(db, tenantId, principal, "workforce.absence.cancel", "absence", absenceId, current, after),
+  ];
+
+  await runWorkforceBatch(db, statements);
+  const next = await db
+    .prepare(`SELECT * FROM workforce_absences WHERE tenant_id = ? AND employee_id = ? AND id = ? LIMIT 1`)
+    .bind(tenantId, employeeId, absenceId)
+    .first();
+
+  return json(200, { ok: true, idempotent: false, absence: next });
 }
 
 async function listScheduleTemplates(db, tenantId) {
@@ -1256,6 +1344,32 @@ async function requireEmployeeAccess(db, tenantId, employeeId, principal) {
 
 function requireManager(principal) {
   if (!principal?.canManage) throw httpError(403, "workforce_management_forbidden");
+}
+
+function buildAuditStatement(db, tenantId, principal, action, entityType, entityId, before, after, metadata) {
+  return db
+    .prepare(`INSERT INTO workforce_audit_events (
+       id, tenant_id, actor_uid, actor_email, action, entity_type, entity_id,
+       before_json, after_json, metadata_json, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      id("wf_audit"),
+      tenantId,
+      principal?.uid || null,
+      principal?.email || null,
+      action,
+      entityType,
+      entityId || null,
+      before == null ? null : JSON.stringify(before),
+      after == null ? null : JSON.stringify(after),
+      metadata == null ? null : JSON.stringify(metadata),
+      nowIso()
+    );
+}
+
+async function runWorkforceBatch(db, statements) {
+  if (typeof db.batch !== "function") throw httpError(500, "workforce_batch_unavailable");
+  return db.batch(statements);
 }
 
 async function audit(db, tenantId, principal, action, entityType, entityId, before, after, metadata) {

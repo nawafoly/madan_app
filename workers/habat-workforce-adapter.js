@@ -177,27 +177,38 @@ async function listLegacyAttendanceMonth(db, sourceEmployeeId, monthKey) {
   const uid = clean(access.uid);
   const email = clean(access.email).toLowerCase();
   const fromDate = `${monthKey}-01`;
-  const [year, month] = monthKey.split('-').map(Number);
-  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + '-01';
-  let statement;
-  if (uid) {
-    statement = db
-      .prepare(`SELECT attendance_date, check_in_at, check_out_at, attendance_status,
-                       late_minutes, early_leave_minutes, worked_minutes
-                  FROM habat_attendance_records
-                 WHERE account_uid = ? AND attendance_date >= ? AND attendance_date < ?
-                 ORDER BY attendance_date ASC`)
-      .bind(uid, fromDate, nextMonth);
-  } else {
-    statement = db
-      .prepare(`SELECT attendance_date, check_in_at, check_out_at, attendance_status,
-                       late_minutes, early_leave_minutes, worked_minutes
-                  FROM habat_attendance_records
-                 WHERE lower(account_email) = ? AND attendance_date >= ? AND attendance_date < ?
-                 ORDER BY attendance_date ASC`)
-      .bind(email, fromDate, nextMonth);
-  }
-  const result = await statement.all();
+  const [year, month] = monthKey.split("-").map(Number);
+  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + "-01";
+
+  // access_id is the canonical attendance identity. uid/email are legacy-only
+  // fallbacks and are considered only for rows that predate access_id.
+  const result = await db
+    .prepare(`SELECT attendance_date, check_in_at, check_out_at, attendance_status,
+                     late_minutes, early_leave_minutes, worked_minutes
+                FROM habat_attendance_records
+               WHERE attendance_date >= ? AND attendance_date < ?
+                 AND (
+                   access_id = ?
+                   OR (
+                     (access_id IS NULL OR trim(access_id) = '')
+                     AND (
+                       (? <> '' AND account_uid = ?)
+                       OR
+                       (? <> '' AND lower(account_email) = ?)
+                     )
+                   )
+                 )
+               ORDER BY attendance_date ASC`)
+    .bind(
+      fromDate,
+      nextMonth,
+      accessId,
+      uid,
+      uid,
+      email,
+      email
+    )
+    .all();
 
   return (result?.results || []).map(row => ({
     date: clean(row.attendance_date),

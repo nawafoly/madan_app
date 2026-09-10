@@ -56,7 +56,7 @@ test("Habbat edge calls Workforce first and only then uses legacy assignment fal
 });
 
 test("Habbat shift template edits sync the matching Workforce template", () => {
-  assert.match(habatV2, /syncWorkforceTemplateFromHabatShift/);
+  assert.match(habatV2, /buildWorkforceTemplateSyncStatement/);
   assert.match(habatV2, /`wf_sched_\$\{legacyShiftId\}`/);
   assert.match(habatV2, /INSERT INTO workforce_schedule_templates/);
   assert.match(habatV2, /ON CONFLICT\(id\) DO UPDATE SET/);

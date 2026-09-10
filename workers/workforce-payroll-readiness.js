@@ -1,4 +1,5 @@
 import { resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
+import { classifyWorkforceDayRange } from "./workforce-day-state.js";
 
 const POLICY_VERSION = "workforce-payroll-readiness-v1";
 const MUTABLE_STATUSES = new Set(["draft"]);
@@ -139,6 +140,14 @@ export function evaluatePayrollAttendanceReadiness(input = {}) {
     }
   }
 
+  if (Number(input.conflictDays || 0) > 0) {
+    add(
+      "workforce_payroll_day_state_conflict",
+      "يوجد تعارض بين الحضور والإجازة أو الغياب ويجب حله قبل احتساب الراتب.",
+      "attendance"
+    );
+  }
+
   if (Number(input.manualReviewAbsenceDays || 0) > 0) {
     add(
       "workforce_payroll_absence_manual_review_required",
@@ -242,6 +251,7 @@ async function buildPayrollReadinessPreview({ db, tenantId, employeeId, monthKey
   const dayResult = buildPayrollDays({
     bounds,
     completedThrough,
+    employment,
     schedules,
     leaves,
     absences,
@@ -272,6 +282,7 @@ async function buildPayrollReadinessPreview({ db, tenantId, employeeId, monthKey
     attendanceRecordCount: dayResult.attendanceRecordCount,
     incompletePunchDays: dayResult.incompletePunchDays,
     manualReviewAbsenceDays: dayResult.manualReviewAbsenceDays,
+    conflictDays: dayResult.conflictDays,
   });
 
   const locked = Boolean(
@@ -341,16 +352,20 @@ async function buildPayrollReadinessPreview({ db, tenantId, employeeId, monthKey
   };
 }
 
-function buildPayrollDays({ bounds, completedThrough, schedules, leaves, absences, sourceRows, attendanceMode }) {
+function buildPayrollDays({ bounds, completedThrough, employment, schedules, leaves, absences, sourceRows, attendanceMode }) {
   if (!completedThrough) return emptyDayResult();
-  const attendanceByDate = new Map();
-  for (const raw of Array.isArray(sourceRows) ? sourceRows : []) {
-    const date = clean(raw.date || raw.attendanceDate || raw.attendance_date);
-    if (!isDateKey(date) || date < bounds.start || date > completedThrough) continue;
-    if (!attendanceByDate.has(date)) attendanceByDate.set(date, raw);
-  }
-  const absenceByDate = new Map(absences.map(row => [clean(row.absence_date), row]));
-  const scheduleByDate = new Map(schedules.map(row => [clean(row.date), row]));
+
+  const canonicalDays = classifyWorkforceDayRange({
+    from: bounds.start,
+    to: completedThrough,
+    today: completedThrough,
+    employment,
+    schedules,
+    leaves,
+    absences,
+    sourceRows,
+  });
+
   const days = [];
   let expectedAttendanceMinutes = 0;
   let attendanceMissingMinutes = 0;
@@ -361,121 +376,111 @@ function buildPayrollDays({ bounds, completedThrough, schedules, leaves, absence
   let manualReviewAbsenceDays = 0;
   let lateMinutes = 0;
   let earlyLeaveMinutes = 0;
+  let conflictDays = 0;
 
-  for (const date of dateKeys(bounds.start, completedThrough)) {
-    const schedule = scheduleByDate.get(date) || null;
-    const scheduledMinutes = schedule?.ready && schedule?.isWorkingDay
-      ? shiftMinutes(schedule.startTime, schedule.endTime)
-      : 0;
-    const scheduleAuthoritative = Boolean(schedule?.ready);
-    let expectedMinutes = scheduledMinutes;
-    let paidExcusedMinutes = 0;
+  for (const day of canonicalDays) {
+    const hasRecord = Boolean(day.checkInAt || day.checkOutAt);
+
+    if (!day.employmentEligible) {
+      days.push({
+        date: day.date,
+        canonicalState: day.state,
+        scheduleKind: clean(day.schedule?.kind) || "unassigned",
+        scheduleReady: Boolean(day.schedule?.ready),
+        isWorkingDay: Boolean(day.schedule?.isWorkingDay),
+        scheduledMinutes: day.scheduledMinutes,
+        expectedAttendanceMinutes: 0,
+        paidExcusedMinutes: 0,
+        attendanceMissingMinutes: 0,
+        checkInAt: day.checkInAt,
+        checkOutAt: day.checkOutAt,
+        missingPunch: day.missingPunch,
+        workedMinutes: day.workedMinutes,
+        lateMinutes: day.lateMinutes,
+        earlyLeaveMinutes: day.earlyLeaveMinutes,
+        absenceUnits: 0,
+        unpaidPartialMinutes: 0,
+        absenceTreatment: day.absenceTreatment,
+        leaveRefs: day.leaveRefs,
+        conflicts: day.conflicts,
+      });
+      continue;
+    }
+
+    if (day.state === "conflict") conflictDays += 1;
+    if (hasRecord) attendanceRecordCount += 1;
+    if (day.missingPunch) incompletePunchDays += 1;
+    lateMinutes += Number(day.lateMinutes || 0);
+    earlyLeaveMinutes += Number(day.earlyLeaveMinutes || 0);
+
     let dayAbsenceUnits = 0;
     let dayUnpaidPartialMinutes = 0;
-    const leaveRefs = [];
 
-    for (const leave of leaves) {
-      if (clean(leave.status) !== "approved" || clean(leave.start_date) > date || clean(leave.end_date) < date) continue;
-      const type = clean(leave.leave_type);
-      const duration = clean(leave.duration_kind) || "full_day";
-      const requestedMinutes = nonNegativeInt(leave.requested_minutes);
-      const chargeable = !scheduleAuthoritative || scheduledMinutes > 0;
-      if (!chargeable) continue;
-      leaveRefs.push({ id: clean(leave.id), type, duration });
-
-      if (type === "unpaid") {
-        if (duration === "full_day") {
-          dayAbsenceUnits = Math.max(dayAbsenceUnits, 1);
-          expectedMinutes = 0;
-        } else if (duration === "half_day") {
-          dayAbsenceUnits = Math.max(dayAbsenceUnits, 0.5);
-          expectedMinutes = Math.max(0, expectedMinutes - scheduledMinutes * 0.5);
-        } else {
-          const partial = requestedMinutes > 0 ? requestedMinutes : 0;
-          dayUnpaidPartialMinutes += partial;
-          expectedMinutes = Math.max(0, expectedMinutes - partial);
-        }
-      } else if (PAID_LEAVE_TYPES.has(type)) {
-        if (duration === "full_day") {
-          paidExcusedMinutes = Math.max(paidExcusedMinutes, scheduledMinutes);
-          expectedMinutes = 0;
-        } else if (duration === "half_day") {
-          const partial = scheduledMinutes * 0.5;
-          paidExcusedMinutes += partial;
-          expectedMinutes = Math.max(0, expectedMinutes - partial);
-        } else {
-          const partial = Math.min(scheduledMinutes, requestedMinutes);
-          paidExcusedMinutes += partial;
-          expectedMinutes = Math.max(0, expectedMinutes - partial);
-        }
-      }
-    }
-
-    const absence = absenceByDate.get(date) || null;
-    if (absence && clean(absence.status) === "approved") {
-      const portion = clean(absence.day_portion) === "half_day" ? 0.5 : 1;
-      const treatment = clean(absence.payroll_treatment) || "attendance_policy";
-      const coveredMinutes = scheduledMinutes * portion;
+    if (day.absence) {
+      const treatment = clean(day.absenceTreatment || "attendance_policy");
       if (treatment === "manual_review") {
-        manualReviewAbsenceDays += portion;
-        expectedMinutes = Math.max(0, expectedMinutes - coveredMinutes);
-      } else if (treatment === "no_deduction") {
-        paidExcusedMinutes += coveredMinutes;
-        expectedMinutes = Math.max(0, expectedMinutes - coveredMinutes);
-      } else {
-        dayAbsenceUnits = Math.max(dayAbsenceUnits, portion);
-        expectedMinutes = Math.max(0, expectedMinutes - coveredMinutes);
+        manualReviewAbsenceDays += Number(day.absencePortion || 0);
+      } else if (treatment === "attendance_policy") {
+        dayAbsenceUnits = Math.max(dayAbsenceUnits, Number(day.absencePortion || 0));
       }
     }
 
-    const attendance = attendanceByDate.get(date) || null;
-    const checkInAt = nullable(attendance?.checkInAt ?? attendance?.check_in_at);
-    const checkOutAt = nullable(attendance?.checkOutAt ?? attendance?.check_out_at);
-    const hasRecord = Boolean(checkInAt || checkOutAt);
-    const missingPunch = Boolean(checkInAt) !== Boolean(checkOutAt);
-    const workedMinutes = nullableInt(attendance?.workedMinutes ?? attendance?.worked_minutes);
-    const rawLate = nonNegativeInt(attendance?.lateMinutes ?? attendance?.late_minutes);
-    const rawEarly = nonNegativeInt(attendance?.earlyLeaveMinutes ?? attendance?.early_leave_minutes);
-    if (hasRecord) attendanceRecordCount += 1;
-    if (missingPunch) incompletePunchDays += 1;
-    lateMinutes += rawLate;
-    earlyLeaveMinutes += rawEarly;
+    for (const leave of day.leaveRefs || []) {
+      if (leave.type !== "unpaid") continue;
+      if (leave.duration === "full_day") {
+        dayAbsenceUnits = Math.max(dayAbsenceUnits, 1);
+      } else if (leave.duration === "half_day") {
+        dayAbsenceUnits = Math.max(dayAbsenceUnits, 0.5);
+      } else {
+        dayUnpaidPartialMinutes += Number(leave.requestedMinutes || 0);
+      }
+    }
 
     let missingMinutes = 0;
-    if (attendanceMode === "required" && expectedMinutes > 0 && !missingPunch) {
+    if (
+      attendanceMode === "required" &&
+      day.expectedAttendanceMinutes > 0 &&
+      !day.missingPunch &&
+      day.state !== "conflict"
+    ) {
       if (!hasRecord) {
-        missingMinutes = expectedMinutes;
-      } else if (workedMinutes != null) {
-        missingMinutes = Math.max(0, expectedMinutes - workedMinutes);
+        missingMinutes = day.expectedAttendanceMinutes;
+      } else if (day.workedMinutes != null) {
+        missingMinutes = Math.max(0, day.expectedAttendanceMinutes - day.workedMinutes);
       } else {
-        missingMinutes = Math.min(expectedMinutes, rawLate + rawEarly);
+        missingMinutes = Math.min(
+          day.expectedAttendanceMinutes,
+          Number(day.lateMinutes || 0) + Number(day.earlyLeaveMinutes || 0)
+        );
       }
     }
 
-    expectedAttendanceMinutes += expectedMinutes;
+    expectedAttendanceMinutes += Number(day.expectedAttendanceMinutes || 0);
     attendanceMissingMinutes += missingMinutes;
     absenceUnits += dayAbsenceUnits;
     unpaidPartialMinutes += dayUnpaidPartialMinutes;
 
     days.push({
-      date,
-      scheduleKind: clean(schedule?.kind) || "unassigned",
-      scheduleReady: Boolean(schedule?.ready),
-      isWorkingDay: Boolean(schedule?.isWorkingDay),
-      scheduledMinutes,
-      expectedAttendanceMinutes: Math.round(expectedMinutes),
-      paidExcusedMinutes: Math.round(paidExcusedMinutes),
+      date: day.date,
+      canonicalState: day.state,
+      scheduleKind: clean(day.schedule?.kind) || "unassigned",
+      scheduleReady: Boolean(day.schedule?.ready),
+      isWorkingDay: Boolean(day.schedule?.isWorkingDay),
+      scheduledMinutes: day.scheduledMinutes,
+      expectedAttendanceMinutes: day.expectedAttendanceMinutes,
+      paidExcusedMinutes: day.paidExcusedMinutes,
       attendanceMissingMinutes: Math.round(missingMinutes),
-      checkInAt,
-      checkOutAt,
-      missingPunch,
-      workedMinutes,
-      lateMinutes: rawLate,
-      earlyLeaveMinutes: rawEarly,
+      checkInAt: day.checkInAt,
+      checkOutAt: day.checkOutAt,
+      missingPunch: day.missingPunch,
+      workedMinutes: day.workedMinutes,
+      lateMinutes: day.lateMinutes,
+      earlyLeaveMinutes: day.earlyLeaveMinutes,
       absenceUnits: roundUnits(dayAbsenceUnits),
       unpaidPartialMinutes: dayUnpaidPartialMinutes,
-      absenceTreatment: absence ? clean(absence.payroll_treatment) || "attendance_policy" : null,
-      leaveRefs,
+      absenceTreatment: day.absenceTreatment,
+      leaveRefs: day.leaveRefs,
+      conflicts: day.conflicts,
     });
   }
 
@@ -490,9 +495,9 @@ function buildPayrollDays({ bounds, completedThrough, schedules, leaves, absence
     manualReviewAbsenceDays: roundUnits(manualReviewAbsenceDays),
     lateMinutes,
     earlyLeaveMinutes,
+    conflictDays,
   };
 }
-
 async function applyPayrollReadiness({ db, tenantId, employeeId, monthKey, preview, principal }) {
   const settings = await db
     .prepare(`SELECT * FROM workforce_payroll_settings WHERE tenant_id = ? AND employee_id = ? LIMIT 1`)

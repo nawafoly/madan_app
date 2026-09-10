@@ -1,3 +1,7 @@
+import { resolveWorkforceDayRange, resolveWorkforceEmployeeBySource } from "./workforce-day-state.js";
+
+const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
+
 const DEFAULT_SHIFT_ID = "habat_shift_default";
 
 export async function handleHabatAttendanceReportingRequest({ request, url, db, resolveRequesterContext }) {
@@ -190,84 +194,53 @@ async function generateMonthlySummary(db, request, requester) {
 }
 
 async function calculateAccessRange(db, access, from, to) {
-  const [recordsResult, overridesResult, shiftsResult, assignmentsResult] = await Promise.all([
-    db.prepare(
-      `SELECT * FROM habat_attendance_records
-       WHERE attendance_date BETWEEN ? AND ?
-         AND (access_id = ? OR lower(account_email) = lower(?))
-       ORDER BY attendance_date ASC`
-    ).bind(from, to, access.id, access.email).all(),
-    db.prepare(
-      `SELECT * FROM habat_attendance_day_overrides
-       WHERE access_id = ? AND attendance_date BETWEEN ? AND ?
-       ORDER BY attendance_date ASC`
-    ).bind(access.id, from, to).all(),
-    db.prepare(`SELECT * FROM habat_attendance_shifts ORDER BY created_at ASC`).all(),
-    db.prepare(
-      `SELECT * FROM habat_attendance_shift_assignments
-       WHERE access_id = ? AND effective_from <= ?
-         AND (effective_to IS NULL OR effective_to >= ?)
-       ORDER BY effective_from ASC`
-    ).bind(access.id, to, from).all(),
-  ]);
+  const employee = await resolveWorkforceEmployeeBySource(
+    db,
+    WORKFORCE_TENANT_ID,
+    access.id
+  );
+  if (!employee?.id) return { ...emptyMetrics(), emergencyLeaveDays: 0 };
 
-  const records = recordsResult?.results || [];
-  const overrides = overridesResult?.results || [];
-  const shifts = shiftsResult?.results || [];
-  const assignments = assignmentsResult?.results || [];
-  const recordByDate = new Map(records.map(row => [normalizeText(row.attendance_date), row]));
-  const overrideByDate = new Map(overrides.map(row => [normalizeText(row.attendance_date), row]));
-  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
-  const today = getRiyadhDateKey();
-  const now = new Date();
+  const recordsResult = await db.prepare(
+    `SELECT * FROM habat_attendance_records
+      WHERE attendance_date BETWEEN ? AND ?
+        AND (access_id = ? OR lower(account_email) = lower(?))
+      ORDER BY attendance_date ASC`
+  ).bind(from, to, access.id, access.email).all();
+
+  const days = await resolveWorkforceDayRange({
+    db,
+    tenantId: WORKFORCE_TENANT_ID,
+    employeeId: employee.id,
+    from,
+    to,
+    sourceRows: recordsResult?.results || [],
+  });
+
   const metrics = { ...emptyMetrics(), emergencyLeaveDays: 0 };
-
-  for (const date of enumerateDateKeys(from, to)) {
-    const record = recordByDate.get(date) || null;
-    const override = overrideByDate.get(date) || null;
-    const hasActualData = Boolean(record || override);
-    if (enrollmentDate && date < enrollmentDate && !hasActualData) continue;
-    if (Number(access.clock_enabled) !== 1 && !hasActualData) continue;
-
-    const shift = resolveShiftForDate(date, assignments, shifts);
-    if (!shift) continue;
-    const workingDay = parseWorkingDays(shift.working_days).includes(weekdayIndex(date));
-    if (!workingDay || date > today) continue;
-
-    const schedule = buildScheduleWindow(date, shift);
-    const attendanceWindowStarted = date < today || (date === today && now.getTime() >= schedule.start.getTime());
-    if (!attendanceWindowStarted && !record && !override) continue;
-
-    const portionWeight = override?.day_portion === "half_day" ? 0.5 : 1;
-    if (override?.override_type === "emergency_leave") {
-      metrics.emergencyLeaveDays += portionWeight;
-      metrics.scheduledDays += portionWeight === 0.5 ? 0.5 : 0;
-      continue;
-    }
+  for (const day of days) {
+    if (!day.employmentEligible || day.date > getRiyadhDateKey()) continue;
+    if (!day.schedule?.ready || !day.schedule?.isWorkingDay) continue;
 
     metrics.scheduledDays += 1;
+    if (day.checkInAt) metrics.attendedDays += 1;
 
-    if (override?.override_type === "absence") {
-      metrics.absentDays += portionWeight;
-      continue;
+    if (day.state === "absence" || day.state === "missing") {
+      metrics.absentDays += Number(day.absencePortion || 1);
     }
 
-    if (record?.check_in_at) {
-      metrics.attendedDays += 1;
-      metrics.workedMinutes += numberOrZero(record.worked_minutes);
-      const rawStatus = normalizeText(record.attendance_status);
-      if (rawStatus.includes("late") || numberOrZero(record.late_minutes) > 0) metrics.lateDays += 1;
-      if (rawStatus.includes("early_leave") || numberOrZero(record.early_leave_minutes) > 0) metrics.earlyLeaveDays += 1;
-      if (!record.check_out_at && now.getTime() > schedule.end.getTime()) metrics.incompleteDays += 1;
-    } else {
-      const absenceBoundary = schedule.start.getTime() + numberOrZero(shift.grace_minutes) * 60_000;
-      if (date < today || now.getTime() > absenceBoundary) metrics.absentDays += 1;
+    if ((day.leaveRefs || []).some(item => item.type === "emergency")) {
+      metrics.emergencyLeaveDays += Number(day.leavePortion || 1);
     }
+
+    if (day.lateMinutes > 0) metrics.lateDays += 1;
+    if (day.earlyLeaveMinutes > 0) metrics.earlyLeaveDays += 1;
+    if (day.missingPunch) metrics.incompleteDays += 1;
+    metrics.workedMinutes += Number(day.workedMinutes || 0);
   }
 
   return normalizeMetricNumbers(metrics);
 }
-
 function emptyMetrics() {
   return {
     scheduledDays: 0,

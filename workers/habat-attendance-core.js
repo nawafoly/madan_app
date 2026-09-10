@@ -1,5 +1,6 @@
 import { provisionHabatAccessToWorkforce } from "./habat-workforce-adapter.js";
 
+import { prepareAttendanceMutationGuard } from "./workforce-mutation-guard.js";
 const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);
 const HABAT_DEFAULT_RECORD_LIMIT = 100;
 const HABAT_MAX_RECORD_LIMIT = 300;
@@ -34,7 +35,7 @@ export async function handleHabatAttendanceRequest({
 
   if (pathname === "/attendance/habat/me") {
     if (request.method !== "GET") return methodNotAllowed(["GET"]);
-    const today = await getTodayRecord(db, requester.uid);
+    const today = await getTodayRecord(db, requester.uid, principal.accessId);
     return json(200, {
       ok: true,
       principal: mapPrincipal(principal),
@@ -259,17 +260,33 @@ function resolveRequesterDisplayName(requester) {
   );
 }
 
-async function getTodayRecord(db, uid) {
+async function getTodayRecord(db, uid, accessId = "") {
   const normalizedUid = normalizeText(uid);
-  if (!normalizedUid) return null;
+  const normalizedAccessId = normalizeText(accessId);
+  if (!normalizedUid && !normalizedAccessId) return null;
   try {
     return await db
       .prepare(
         `SELECT * FROM habat_attendance_records
-         WHERE account_uid = ? AND attendance_date = ?
+         WHERE attendance_date = ?
+           AND (
+             access_id = ?
+             OR (
+               (access_id IS NULL OR trim(access_id) = '')
+               AND ? <> ''
+               AND account_uid = ?
+             )
+           )
+         ORDER BY CASE WHEN access_id = ? THEN 0 ELSE 1 END, created_at ASC
          LIMIT 1`
       )
-      .bind(normalizedUid, getRiyadhDateKey())
+      .bind(
+        getRiyadhDateKey(),
+        normalizedAccessId,
+        normalizedUid,
+        normalizedUid,
+        normalizedAccessId
+      )
       .first();
   } catch (error) {
     console.error("[habat-attendance] today lookup failed", error);
@@ -281,7 +298,21 @@ async function checkIn(db, request, requester, principal) {
   const uid = normalizeText(requester.uid);
   if (!uid) return forbidden("habat_clock_forbidden");
   const date = getRiyadhDateKey();
-  const existing = await getTodayRecord(db, uid);
+  const existing = await getTodayRecord(db, uid, principal.accessId);
+  // attendance_checkIn_guard_applied
+  const workforceGuard = principal.accessId
+    ? await prepareAttendanceMutationGuard({
+        db,
+        tenantId: "restaurant_tenant_habat_alwaraq",
+        sourceEmployeeId: principal.accessId,
+        attendanceDate: date,
+        currentRecord: existing,
+        mutation: "check_in",
+      })
+    : null;
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
 
   if (existing?.check_in_at) {
     return json(409, {
@@ -340,7 +371,12 @@ async function checkIn(db, request, requester, principal) {
         .run();
     }
 
-    const record = await getTodayRecord(db, uid);
+  // payroll_stale_after_checkIn
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
+
+    const record = await getTodayRecord(db, uid, principal.accessId);
     await writeAudit(db, requester, "check_in", "habat_attendance_record", record?.id || id, null, record);
     return json(200, { ok: true, record: mapRecord(record) });
   } catch (error) {
@@ -352,7 +388,21 @@ async function checkIn(db, request, requester, principal) {
 async function checkOut(db, request, requester, principal) {
   const uid = normalizeText(requester.uid);
   if (!uid) return forbidden("habat_clock_forbidden");
-  const existing = await getTodayRecord(db, uid);
+  const existing = await getTodayRecord(db, uid, principal.accessId);
+  // attendance_checkOut_guard_applied
+  const workforceGuard = principal.accessId && existing
+    ? await prepareAttendanceMutationGuard({
+        db,
+        tenantId: "restaurant_tenant_habat_alwaraq",
+        sourceEmployeeId: principal.accessId,
+        attendanceDate: existing.attendance_date || getRiyadhDateKey(),
+        currentRecord: existing,
+        mutation: "check_out",
+      })
+    : null;
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
 
   if (!existing?.check_in_at) {
     return json(409, { ok: false, message: "habat_check_in_required" });
@@ -388,7 +438,12 @@ async function checkOut(db, request, requester, principal) {
       )
       .run();
 
-    const record = await getTodayRecord(db, uid);
+  // payroll_stale_after_checkOut
+  if (workforceGuard?.staleStatements?.length) {
+    await db.batch(workforceGuard.staleStatements);
+  }
+
+    const record = await getTodayRecord(db, uid, principal.accessId);
     await writeAudit(db, requester, "check_out", "habat_attendance_record", existing.id, existing, record);
     return json(200, { ok: true, record: mapRecord(record) });
   } catch (error) {

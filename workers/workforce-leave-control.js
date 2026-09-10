@@ -1,6 +1,10 @@
 import { getAnnualLeaveState } from "./workforce-annual-leave.js";
 import { resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
 
+import {
+  prepareLeaveMutationGuard,
+  preparePayrollUnlockGuard,
+} from "./workforce-mutation-guard.js";
 const LEAVE_TYPES = new Set([
   "annual",
   "sick",
@@ -19,6 +23,7 @@ export async function handleWorkforceLeaveControlRequest({
   db,
   tenant,
   principal,
+  sourceAdapter,
   routePrefix = "",
 }) {
   const pathname = stripRoutePrefix(url?.pathname || "", routePrefix);
@@ -36,7 +41,7 @@ export async function handleWorkforceLeaveControlRequest({
     if (request.method === "POST") {
       requireManager(principal);
       const body = await readJson(request);
-      const result = await createEmployeeLeave(db, tenant.id, employeeId, body, principal);
+      const result = await createEmployeeLeave(db, tenant.id, employeeId, body, principal, sourceAdapter);
       return json(201, { ok: true, ...result });
     }
     return methodNotAllowed(["GET", "POST"]);
@@ -45,7 +50,7 @@ export async function handleWorkforceLeaveControlRequest({
   requireManager(principal);
   const leaveId = decodeURIComponent(detailMatch[2]);
   if (request.method === "DELETE") {
-    const result = await cancelEmployeeLeave(db, tenant.id, employeeId, leaveId, principal);
+    const result = await cancelEmployeeLeave(db, tenant.id, employeeId, leaveId, principal, sourceAdapter);
     return json(200, { ok: true, ...result });
   }
   return methodNotAllowed(["DELETE"]);
@@ -78,8 +83,17 @@ async function listEmployeeLeaves(db, tenantId, employeeId) {
   return result?.results || [];
 }
 
-async function createEmployeeLeave(db, tenantId, employeeId, body, principal) {
+async function createEmployeeLeave(db, tenantId, employeeId, body, principal, sourceAdapter) {
   const normalized = normalizeLeaveInput(body);
+  const guard = await prepareLeaveMutationGuard({
+    db,
+    tenantId,
+    employeeId,
+    sourceAdapter,
+    fromDate: normalized.startDate,
+    toDate: normalized.endDate,
+    durationKind: normalized.durationKind,
+  });
   const leaveId = id("wf_leave");
   const now = nowIso();
   let annualUsage = null;
@@ -125,6 +139,7 @@ async function createEmployeeLeave(db, tenantId, employeeId, body, principal) {
 
   const statements = [leaveStatement];
   if (annualUsage) statements.push(buildAnnualUsageStatement(db, annualUsage));
+  statements.push(...guard.staleStatements);
   statements.push(buildAuditStatement(db, {
     tenantId,
     principal,
@@ -161,7 +176,7 @@ async function createEmployeeLeave(db, tenantId, employeeId, body, principal) {
   };
 }
 
-async function cancelEmployeeLeave(db, tenantId, employeeId, leaveId, principal) {
+async function cancelEmployeeLeave(db, tenantId, employeeId, leaveId, principal, sourceAdapter) {
   const leave = await requireLeave(db, tenantId, employeeId, leaveId);
   if (clean(leave.status) === "cancelled") {
     return {
@@ -174,6 +189,15 @@ async function cancelEmployeeLeave(db, tenantId, employeeId, leaveId, principal)
   }
   if (clean(leave.status) !== "approved") throw httpError(409, "workforce_leave_not_cancellable");
 
+  const staleStatements = await preparePayrollUnlockGuard({
+    db,
+    tenantId,
+    employeeId,
+    fromDate: leave.start_date,
+    toDate: leave.end_date,
+    reason: "leave_cancelled",
+  });
+
   const now = nowIso();
   const statements = [
     db.prepare(`UPDATE workforce_leaves
@@ -181,6 +205,8 @@ async function cancelEmployeeLeave(db, tenantId, employeeId, leaveId, principal)
                  WHERE tenant_id = ? AND employee_id = ? AND id = ?`)
       .bind(now, tenantId, employeeId, leaveId),
   ];
+
+  statements.push(...staleStatements);
 
   let reversal = null;
   if (clean(leave.leave_type) === "annual") {

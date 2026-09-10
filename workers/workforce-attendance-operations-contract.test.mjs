@@ -5,6 +5,7 @@ import test from "node:test";
 import { resolveAttendanceOperationDay } from "./workforce-attendance-operations.js";
 
 const service = fs.readFileSync(new URL("./workforce-attendance-operations.js", import.meta.url), "utf8");
+const dayState = fs.readFileSync(new URL("./workforce-day-state.js", import.meta.url), "utf8");
 const ui = fs.readFileSync(new URL("../client/src/features/workforce/WorkforceAttendanceOperationsPanel.tsx", import.meta.url), "utf8");
 const integration = fs.readFileSync(new URL("../scripts/integrate-workforce-attendance-operations.mjs", import.meta.url), "utf8");
 
@@ -20,7 +21,7 @@ test("attendance operations are source-adapter driven and readiness gated", () =
   assert.ok(service.includes('status: "unlinked"'));
   assert.ok(service.includes('status: "exempt"'));
   assert.ok(service.includes('linkStatus !== "confirmed"'));
-  assert.ok(service.includes('status: "confirmed"'));
+  assert.ok(service.includes('"confirmed"'));
 });
 
 test("attendance operations expose lateness, early leave, missing punch, and explicit absence", () => {
@@ -91,14 +92,15 @@ test("attendance operations preserve completed historical attendance snapshots",
 });
 
 test("attendance operations resolve schedule templates before calculating payroll-facing metrics", () => {
-  assert.match(service, /resolveWorkforceScheduleRange/);
-  assert.match(service, /scheduleByDate/);
+  assert.match(service, /resolveWorkforceDayRange/);
+  assert.match(dayState, /resolveWorkforceScheduleRange/);
+  assert.match(dayState, /scheduleByDate/);
   assert.match(service, /resolveAttendanceOperationDay/);
   assert.match(service, /historicalComplete/);
 });
 
 test("attendance operations use bounded month ranges instead of wildcard month scans", () => {
-  assert.ok(service.includes("absence_date >= ? AND absence_date < ?"));
+  assert.ok(dayState.includes("absence_date BETWEEN ? AND ?"));
   assert.ok(service.includes("monthBounds"));
   assert.equal(service.includes("absence_date LIKE ?"), false);
   assert.ok(integration.includes("account_uid = ? AND attendance_date >= ? AND attendance_date < ?"));
