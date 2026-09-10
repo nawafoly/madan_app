@@ -936,6 +936,20 @@ async function createEmployeeAbsence(db, tenantId, employeeId, request, principa
   const dayPortion = clean(body.dayPortion || "full_day");
   const payrollTreatment = clean(body.payrollTreatment || "attendance_policy");
   if (!isDateKey(absenceDate)) return json(400, { ok: false, message: "workforce_absence_date_invalid" });
+
+  const todayRiyadh = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  if (absenceDate >= todayRiyadh) {
+    return json(409, {
+      ok: false,
+      message: "workforce_absence_requires_completed_day",
+    });
+  }
   if (!ABSENCE_PORTIONS.has(dayPortion)) return json(400, { ok: false, message: "workforce_absence_portion_invalid" });
   if (!new Set(["attendance_policy", "no_deduction", "manual_review"]).has(payrollTreatment)) {
     return json(400, { ok: false, message: "workforce_absence_payroll_treatment_invalid" });

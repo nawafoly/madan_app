@@ -32,6 +32,47 @@ test("canonical day state: paid full-day leave is leave, not absence", () => {
   assert.equal(day.absencePortion, 0);
 });
 
+test("canonical day state: past working day without punch is absence, today and future are not", () => {
+  const schedules = [
+    {
+      date: "2026-09-09",
+      ready: true,
+      isWorkingDay: true,
+      startTime: "09:00",
+      endTime: "17:00",
+    },
+    {
+      date: "2026-09-10",
+      ready: true,
+      isWorkingDay: true,
+      startTime: "09:00",
+      endTime: "17:00",
+    },
+    {
+      date: "2026-09-11",
+      ready: true,
+      isWorkingDay: true,
+      startTime: "09:00",
+      endTime: "17:00",
+    },
+  ];
+
+  const days = classifyWorkforceDayRange({
+    from: "2026-09-09",
+    to: "2026-09-11",
+    today: "2026-09-10",
+    employment: {
+      employment_status: "active",
+      service_start_date: "2026-01-01",
+    },
+    schedules,
+    sourceRows: [],
+  });
+
+  assert.equal(days[0].state, "absence");
+  assert.equal(days[1].state, "work");
+  assert.equal(days[2].state, "future");
+});
 test("canonical day state: before employment is never absence", () => {
   const [day] = classifyWorkforceDayRange({
     from: "2026-09-10",
@@ -225,4 +266,20 @@ test("v2 context mapper helpers are all defined", () => {
   ]) {
     assert.match(v2, new RegExp(`function ${helper}\\(`), `${helper} must be defined`);
   }
+});
+test("administrative absence cannot be created for today or future dates", () => {
+  const core = fs.readFileSync(
+    new URL("./workforce-core.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(
+    core,
+    /if \(absenceDate >= todayRiyadh\)/
+  );
+
+  assert.match(
+    core,
+    /workforce_absence_requires_completed_day/
+  );
 });

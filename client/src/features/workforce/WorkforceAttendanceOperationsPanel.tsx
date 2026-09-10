@@ -1,10 +1,18 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarClock, Clock3, RefreshCw, ShieldCheck, UserX } from "lucide-react";
+import { AlertTriangle, CalendarClock, Clock3, Fingerprint, RefreshCw, ShieldCheck, UserX } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -19,6 +27,11 @@ import { workforceApi, WorkforceApiError } from "./workforceClient";
 
 import HabatDatePicker from "@/pages/habat/HabatDatePicker";
 import { formatHabatClockTime } from "@/pages/habat/HabatTimeInput";
+import {
+  fromRiyadhDateTimeLocal,
+  friendlyHabatError,
+  habatApi,
+} from "@/pages/habat/habatAttendanceClient";
 import { useHabatRealtimeRefresh } from "@/pages/habat/habatRealtimeClient";
 type AttendanceDay = {
   date: string;
@@ -29,6 +42,12 @@ type AttendanceDay = {
   earlyLeaveMinutes: number;
   workedMinutes: number | null;
   missingPunch: boolean;
+  schedule?: null | {
+    ready?: boolean;
+    isWorkingDay?: boolean;
+    startTime?: string | null;
+    endTime?: string | null;
+  };
   explicitAbsence: null | {
     id: string;
     dayPortion: "full_day" | "half_day";
@@ -55,6 +74,7 @@ type AttendancePayload = {
     earlyLeaveDays: number;
     earlyLeaveMinutes: number;
     missingPunchDays: number;
+    absenceDays: number;
     explicitAbsenceDays: number;
   };
   days: AttendanceDay[];
@@ -109,6 +129,12 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
   const [payload, setPayload] = useState<AttendancePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [manualDay, setManualDay] = useState<AttendanceDay | null>(null);
+  const [manualCheckIn, setManualCheckIn] = useState("09:00");
+  const [manualCheckOut, setManualCheckOut] = useState("17:00");
+  const [manualReason, setManualReason] = useState("إضافة بصمة يدوية");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,6 +155,70 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
   useEffect(() => { void load(); }, [load]);
   useHabatRealtimeRefresh(load);
 
+  const openManualAttendance = useCallback((day: AttendanceDay) => {
+    setManualDay(day);
+    setManualCheckIn(day.schedule?.startTime || "09:00");
+    setManualCheckOut(day.schedule?.endTime || "17:00");
+    setManualReason("إضافة بصمة يدوية");
+    setManualError("");
+  }, []);
+
+  const saveManualAttendance = useCallback(async () => {
+    if (!manualDay || !payload?.readiness.sourceEmployeeId || manualBusy) return;
+
+    const checkInAt = fromRiyadhDateTimeLocal(
+      `${manualDay.date}T${manualCheckIn}`
+    );
+    const checkOutAt = manualCheckOut
+      ? fromRiyadhDateTimeLocal(`${manualDay.date}T${manualCheckOut}`)
+      : null;
+
+    if (!checkInAt) {
+      setManualError(
+        tr(language, "حدد وقت دخول صحيح.", "Enter a valid clock-in time.")
+      );
+      return;
+    }
+
+    if (manualReason.trim().length < 3) {
+      setManualError(
+        tr(language, "اكتب سبب التصحيح.", "Enter a correction reason.")
+      );
+      return;
+    }
+
+    setManualBusy(true);
+    setManualError("");
+
+    try {
+      await habatApi<{ ok: true }>("v3/records/manual", {
+        method: "POST",
+        body: JSON.stringify({
+          accessId: payload.readiness.sourceEmployeeId,
+          date: manualDay.date,
+          checkInAt,
+          ...(checkOutAt ? { checkOutAt } : {}),
+          reason: manualReason.trim(),
+        }),
+      });
+
+      setManualDay(null);
+      await load();
+    } catch (caught) {
+      setManualError(friendlyHabatError(caught));
+    } finally {
+      setManualBusy(false);
+    }
+  }, [
+    language,
+    load,
+    manualBusy,
+    manualCheckIn,
+    manualCheckOut,
+    manualDay,
+    manualReason,
+    payload?.readiness.sourceEmployeeId,
+  ]);
   const readinessLabel = useMemo(() => {
     const status = payload?.readiness.status;
     if (status === "confirmed") return tr(language, "ربط الحضور مؤكد", "Attendance Link Confirmed");
@@ -175,13 +265,14 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
             ) : null}
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
             <Metric label={tr(language, "أيام بسجل", "Days With Records")} value={summary?.daysWithRecords || 0} />
             <Metric label={tr(language, "أيام تأخير", "Late Days")} value={summary?.lateDays || 0} />
             <Metric label={tr(language, "دقائق التأخير", "Late Minutes")} value={summary?.lateMinutes || 0} />
             <Metric label={tr(language, "خروج مبكر", "Early Leave")} value={summary?.earlyLeaveDays || 0} />
             <Metric label={tr(language, "دقائق خروج مبكر", "Early Leave Minutes")} value={summary?.earlyLeaveMinutes || 0} />
             <Metric label={tr(language, "بصمة ناقصة", "Missing Punch")} value={summary?.missingPunchDays || 0} />
+            <Metric label={tr(language, "أيام غياب", "Absence Days")} value={summary?.absenceDays || 0} />
             <Metric label={tr(language, "غياب معتمد", "Approved Absence")} value={summary?.explicitAbsenceDays || 0} />
           </div>
 
@@ -205,14 +296,47 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
                     <TableCell className="font-semibold">{dateText(day.date)}</TableCell>
                     <TableCell dir="ltr" className="text-start">{timeText(day.checkInAt, language)}</TableCell>
                     <TableCell dir="ltr" className="text-start">{timeText(day.checkOutAt, language)}</TableCell>
-                    <TableCell>{day.explicitAbsence ? tr(language, "غياب", "Absent") : day.status || "—"}</TableCell>
+                    <TableCell>
+                      {day.status === "absence"
+                        ? tr(language, "غياب", "Absent")
+                        : day.status === "future"
+                          ? tr(language, "قادم", "Future")
+                          : day.status === "rest"
+                            ? tr(language, "راحة", "Rest")
+                            : day.status === "work"
+                              ? tr(language, "بانتظار البصمة", "Waiting for Attendance")
+                              : day.status === "incomplete"
+                                ? tr(language, "بصمة ناقصة", "Incomplete")
+                                : day.status === "leave"
+                                  ? tr(language, "إجازة", "Leave")
+                                  : day.status || "—"}
+                    </TableCell>
                     <TableCell>{minutesText(day.lateMinutes, language)}</TableCell>
                     <TableCell>{minutesText(day.earlyLeaveMinutes, language)}</TableCell>
                     <TableCell>{day.workedMinutes == null ? "—" : minutesText(day.workedMinutes, language)}</TableCell>
                     <TableCell>
                       {day.missingPunch ? <Badge variant="outline" className="rounded-full"><Clock3 className="ml-1 h-3.5 w-3.5" /> {tr(language, "بصمة ناقصة", "Missing Punch")}</Badge> : null}
                       {day.explicitAbsence ? <Badge variant="outline" className="mr-1 rounded-full"><UserX className="ml-1 h-3.5 w-3.5" /> {day.explicitAbsence.dayPortion === "half_day" ? tr(language, "غياب نصف يوم", "Half-Day Absence") : tr(language, "غياب يوم كامل", "Full-Day Absence")}</Badge> : null}
-                      {!day.missingPunch && !day.explicitAbsence ? "—" : null}
+                      {day.status === "absence" &&
+                      !day.explicitAbsence &&
+                      !day.checkInAt &&
+                      !day.checkOutAt ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={() => openManualAttendance(day)}
+                        >
+                          <Fingerprint className="ml-1 h-3.5 w-3.5" />
+                          {tr(language, "إضافة بصمة", "Add Attendance")}
+                        </Button>
+                      ) : null}
+                      {!day.missingPunch &&
+                      !day.explicitAbsence &&
+                      day.status !== "absence"
+                        ? "—"
+                        : null}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -222,6 +346,95 @@ export default function WorkforceAttendanceOperationsPanel({ employeeId }: Props
           </div>
         </>
       ) : null}
+
+      <Dialog
+        open={Boolean(manualDay)}
+        onOpenChange={open => {
+          if (!open && !manualBusy) {
+            setManualDay(null);
+            setManualError("");
+          }
+        }}
+      >
+        <DialogContent dir={languageDir(language)} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {tr(language, "إضافة بصمة يدوية", "Add Manual Attendance")}
+            </DialogTitle>
+            <DialogDescription>
+              {manualDay
+                ? `${tr(language, "التاريخ", "Date")}: ${dateText(manualDay.date)}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                {tr(language, "وقت الدخول", "Clock In")}
+              </label>
+              <Input
+                type="time"
+                value={manualCheckIn}
+                onChange={event => setManualCheckIn(event.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                {tr(language, "وقت الخروج", "Clock Out")}
+              </label>
+              <Input
+                type="time"
+                value={manualCheckOut}
+                onChange={event => setManualCheckOut(event.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                {tr(language, "سبب التعديل", "Correction Reason")}
+              </label>
+              <Input
+                value={manualReason}
+                onChange={event => setManualReason(event.target.value)}
+              />
+            </div>
+
+            {manualError ? (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {manualError}
+              </p>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManualDay(null)}
+              disabled={manualBusy}
+            >
+              {tr(language, "إلغاء", "Cancel")}
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => void saveManualAttendance()}
+              disabled={
+                manualBusy ||
+                !manualCheckIn ||
+                manualReason.trim().length < 3
+              }
+            >
+              <Fingerprint className="ml-1 h-4 w-4" />
+              {manualBusy
+                ? tr(language, "جارٍ الحفظ...", "Saving...")
+                : tr(language, "حفظ البصمة", "Save Attendance")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

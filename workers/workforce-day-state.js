@@ -173,7 +173,7 @@ export function classifyWorkforceDayRange({
             ? "early_leave"
             : "present";
     } else if (date < today) {
-      state = expectedMinutes > 0 ? "missing" : (dayLeaves.length ? "leave" : abs ? "absence" : "rest");
+      state = expectedMinutes > 0 ? "absence" : (dayLeaves.length ? "leave" : abs ? "absence" : "rest");
     } else {
       state = "work";
     }
@@ -322,7 +322,8 @@ export function summarizeWorkforceDays(days = []) {
     if (day.earlyLeaveMinutes > 0) out.earlyLeaveDays += 1;
     out.earlyLeaveMinutes += Number(day.earlyLeaveMinutes || 0);
     if (day.missingPunch) out.missingPunchDays += 1;
-    if (day.state === "absence") out.explicitAbsenceDays += 1;
+    if (day.state === "absence") out.absenceDays += 1;
+    if (day.state === "absence" && day.absence) out.explicitAbsenceDays += 1;
     if (day.state === "leave") out.leaveDays += 1;
     if (day.state === "rest") out.restDays += 1;
     if (day.state === "missing") out.missingDays += 1;
@@ -337,6 +338,7 @@ export function summarizeWorkforceDays(days = []) {
     earlyLeaveDays: 0,
     earlyLeaveMinutes: 0,
     missingPunchDays: 0,
+    absenceDays: 0,
     explicitAbsenceDays: 0,
     leaveDays: 0,
     restDays: 0,
