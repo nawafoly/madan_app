@@ -75,6 +75,16 @@ type Props = {
   legacyAttendance?: ReactNode;
 };
 
+type EmployeeTab =
+  | "basic"
+  | "payroll"
+  | "schedule"
+  | "leaves"
+  | "absences"
+  | "attendance";
+
+const EMPLOYEE_TAB_STORAGE_PREFIX = "habat.employeeTab.";
+
 type AssignmentRow = {
   id?: string;
   template_id?: string;
@@ -372,6 +382,27 @@ function scheduleSummary(
 }
 
 export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendance }: Props) {
+  const tabStorageKey = `${EMPLOYEE_TAB_STORAGE_PREFIX}${clean(identity.accountUid) || clean(identity.accountEmail).toLowerCase() || "unknown"}`;
+
+  const [activeTab, setActiveTab] = useState<EmployeeTab>(() => {
+    try {
+      const stored = sessionStorage.getItem(tabStorageKey);
+      if (
+        stored === "basic" ||
+        stored === "payroll" ||
+        stored === "schedule" ||
+        stored === "leaves" ||
+        stored === "absences" ||
+        stored === "attendance"
+      ) {
+        return stored;
+      }
+    } catch {
+      // sessionStorage may be unavailable in restricted environments.
+    }
+
+    return "basic";
+  });
   const { language } = useLanguage();
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [file, setFile] = useState<WorkforceEmployeeFilePayload | null>(null);
@@ -497,6 +528,38 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
 
   useHabatRealtimeRefresh(refreshFromRealtime);
 
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(tabStorageKey);
+      if (
+        stored === "basic" ||
+        stored === "payroll" ||
+        stored === "schedule" ||
+        stored === "leaves" ||
+        stored === "absences" ||
+        stored === "attendance"
+      ) {
+        setActiveTab(stored);
+      }
+    } catch {
+      // Keep current tab when storage is unavailable.
+    }
+  }, [tabStorageKey]);
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const next = value as EmployeeTab;
+
+      setActiveTab(next);
+
+      try {
+        sessionStorage.setItem(tabStorageKey, next);
+      } catch {
+        // Tab navigation must still work without storage.
+      }
+    },
+    [tabStorageKey]
+  );
   const currentWeekPlanSignature = useMemo(() => weekPlanSignature(weekPlan), [weekPlan]);
   const hasUnsavedScheduleChanges = currentWeekPlanSignature !== savedWeekPlanSignature;
   const needsInitialScheduleSave = assignments.length === 0;
@@ -676,7 +739,12 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
 
-      <Tabs defaultValue="basic" dir={languageDir(language)} className="gap-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        dir={languageDir(language)}
+        className="gap-4"
+      >
         <div className="w-full overflow-x-auto pb-1">
           <TabsList className="inline-flex h-auto min-w-max items-center justify-start gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
             <TabsTrigger
