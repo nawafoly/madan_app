@@ -263,6 +263,9 @@ test("v2 context mapper helpers are all defined", () => {
     "mapPublicSettings",
     "mapRecord",
     "mapClockLocation",
+    "calculateAttendanceMetrics",
+    "buildScheduleWindow",
+    "isWorkingDay",
   ]) {
     assert.match(v2, new RegExp(`function ${helper}\\(`), `${helper} must be defined`);
   }

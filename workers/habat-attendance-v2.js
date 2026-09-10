@@ -1571,6 +1571,67 @@ async function getTodayRecord(db, uid, accessId = "") {
   }
 }
 
+function calculateAttendanceMetrics({ checkInAt, checkOutAt, shift, schedule }) {
+  const checkIn = checkInAt ? new Date(checkInAt) : null;
+  const checkOut = checkOutAt ? new Date(checkOutAt) : null;
+
+  if (!checkIn || Number.isNaN(checkIn.getTime()) || !schedule?.start || !schedule?.end) {
+    return {
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+      workedMinutes: null,
+      status: "present",
+    };
+  }
+
+  const graceMinutes = Math.max(0, Number(shift?.grace_minutes || 0));
+  const earlyLeaveToleranceMinutes = Math.max(
+    0,
+    Number(shift?.early_leave_tolerance_minutes || 0)
+  );
+
+  const rawLateMinutes = Math.max(
+    0,
+    Math.floor((checkIn.getTime() - schedule.start.getTime()) / 60000)
+  );
+
+  const lateMinutes =
+    rawLateMinutes > graceMinutes ? rawLateMinutes : 0;
+
+  let earlyLeaveMinutes = 0;
+  let workedMinutes = null;
+
+  if (checkOut && !Number.isNaN(checkOut.getTime())) {
+    const rawEarlyLeaveMinutes = Math.max(
+      0,
+      Math.floor((schedule.end.getTime() - checkOut.getTime()) / 60000)
+    );
+
+    earlyLeaveMinutes =
+      rawEarlyLeaveMinutes > earlyLeaveToleranceMinutes
+        ? rawEarlyLeaveMinutes
+        : 0;
+
+    workedMinutes = Math.max(
+      0,
+      Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
+    );
+  }
+
+  return {
+    lateMinutes,
+    earlyLeaveMinutes,
+    workedMinutes,
+    status:
+      lateMinutes > 0 && earlyLeaveMinutes > 0
+        ? "late_early_leave"
+        : lateMinutes > 0
+          ? "late"
+          : earlyLeaveMinutes > 0
+            ? "early_leave"
+            : "present",
+  };
+}
 function buildScheduleWindow(dateKey, shift) {
   const startTime = normalizeTime(shift?.start_time) || "09:00";
   const endTime = normalizeTime(shift?.end_time) || "17:00";
