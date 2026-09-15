@@ -1,0 +1,6 @@
+﻿name = "madan-project-study"
+main = "worker.js"
+compatibility_date = "2026-09-15"
+
+[vars]
+PROJECT_STUDY_RECIPIENT = "operations@madanalbena.com"

@@ -2266,3 +2266,316 @@ exports.writeAuditLog = onCall(
     );
   }
 );
+
+const PROJECT_STUDY_RECIPIENT = "operations@madanalbena.com";
+const PROJECT_STUDY_MAX_FILES = 5;
+const PROJECT_STUDY_MAX_FILE_BYTES = 8 * 1024 * 1024;
+const PROJECT_STUDY_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+
+function escapeProjectStudyHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+exports.submitProjectStudy = onCall(
+  PUBLIC_WEB_CALLABLE_OPTIONS,
+  async request => {
+    const data = request.data || {};
+
+    const name = String(data.name || "").trim();
+    const phone = String(data.phone || "").trim();
+    const email = String(data.email || "").trim().toLowerCase();
+    const city = String(data.city || "").trim();
+    const floors = String(data.floors || "").trim();
+    const finishLevel = String(data.finishLevel || "").trim();
+    const notes = String(data.notes || "").trim();
+    const files = Array.isArray(data.files) ? data.files : [];
+    const billOfQuantities = data.billOfQuantities || null;
+
+    if (name.length < 2 || name.length > 120) {
+      throw new HttpsError("invalid-argument", "يرجى إدخال الاسم بشكل صحيح.");
+    }
+
+    if (!/^05\d{8}$/.test(phone)) {
+      throw new HttpsError("invalid-argument", "يرجى إدخال رقم جوال سعودي صحيح.");
+    }
+
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      throw new HttpsError("invalid-argument", "يرجى إدخال بريد إلكتروني صحيح.");
+    }
+
+    if (!city || city.length > 100) {
+      throw new HttpsError("invalid-argument", "يرجى إدخال مدينة المشروع.");
+    }
+
+    const floorCount = Number(floors);
+    if (!Number.isInteger(floorCount) || floorCount < 1 || floorCount > 100) {
+      throw new HttpsError("invalid-argument", "عدد الأدوار غير صحيح.");
+    }
+
+    if (!["اقتصادي", "متوسط", "فاخر"].includes(finishLevel)) {
+      throw new HttpsError("invalid-argument", "مستوى التشطيب غير صحيح.");
+    }
+
+    if (notes.length > 3000) {
+      throw new HttpsError("invalid-argument", "الملاحظات طويلة جدًا.");
+    }
+
+    if (files.length > PROJECT_STUDY_MAX_FILES) {
+      throw new HttpsError(
+        "invalid-argument",
+        `الحد الأقصى للمرفقات ${PROJECT_STUDY_MAX_FILES} ملفات.`
+      );
+    }
+
+    let totalBytes = 0;
+    const attachments = files.map((file, index) => {
+      const filename = String(file?.name || `project-${index + 1}.pdf`)
+        .replace(/[^\w.\-\u0600-\u06FF ]/g, "_")
+        .slice(0, 150);
+
+      const contentType = String(file?.type || "").toLowerCase();
+      const content = String(file?.content || "");
+
+      if (contentType !== "application/pdf") {
+        throw new HttpsError("invalid-argument", "يسمح برفع ملفات PDF فقط.");
+      }
+
+      const base64 = content.includes(",")
+        ? content.slice(content.indexOf(",") + 1)
+        : content;
+
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+        throw new HttpsError("invalid-argument", "أحد المرفقات غير صالح.");
+      }
+
+      const bytes = Buffer.from(base64, "base64");
+
+      if (!bytes.length || bytes.length > PROJECT_STUDY_MAX_FILE_BYTES) {
+        throw new HttpsError(
+          "invalid-argument",
+          "يجب ألا يتجاوز حجم الملف الواحد 8 MB."
+        );
+      }
+
+      if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+        throw new HttpsError("invalid-argument", "المرفق ليس ملف PDF صالحًا.");
+      }
+
+      totalBytes += bytes.length;
+
+      return {
+        filename,
+        content: base64,
+      };
+    });
+
+    let billOfQuantitiesAttachment = null;
+
+    if (billOfQuantities) {
+      const filename = String(
+        billOfQuantities?.name || "جدول-الكميات.pdf"
+      )
+        .replace(/[^\w.\-\u0600-\u06FF ]/g, "_")
+        .slice(0, 150);
+
+      const contentType = String(billOfQuantities?.type || "").toLowerCase();
+      const content = String(billOfQuantities?.content || "");
+
+      if (contentType !== "application/pdf") {
+        throw new HttpsError(
+          "invalid-argument",
+          "جدول الكميات يجب أن يكون ملف PDF."
+        );
+      }
+
+      const base64 = content.includes(",")
+        ? content.slice(content.indexOf(",") + 1)
+        : content;
+
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "جدول الكميات غير صالح."
+        );
+      }
+
+      const bytes = Buffer.from(base64, "base64");
+
+      if (!bytes.length || bytes.length > PROJECT_STUDY_MAX_FILE_BYTES) {
+        throw new HttpsError(
+          "invalid-argument",
+          "يجب ألا يتجاوز جدول الكميات 8 MB."
+        );
+      }
+
+      if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+        throw new HttpsError(
+          "invalid-argument",
+          "جدول الكميات ليس ملف PDF صالحًا."
+        );
+      }
+
+      totalBytes += bytes.length;
+
+      billOfQuantitiesAttachment = {
+        filename,
+        content: base64,
+      };
+    }
+
+    if (files.length === 0) {
+      throw new HttpsError(
+        "invalid-argument",
+        "مخططات المشروع مطلوبة."
+      );
+    }
+
+    if (totalBytes > PROJECT_STUDY_MAX_TOTAL_BYTES) {
+      throw new HttpsError(
+        "invalid-argument",
+        "إجمالي حجم المرفقات يجب ألا يتجاوز 20 MB."
+      );
+    }
+
+    const resendApiKey = stringOrEmpty(process.env.RESEND_API_KEY);
+    const fromEmail = stringOrEmpty(process.env.NOTIFICATION_FROM_EMAIL);
+
+    if (!resendApiKey || !fromEmail) {
+      console.error("[project-study] email configuration missing");
+      throw new HttpsError(
+        "failed-precondition",
+        "خدمة إرسال الطلب غير متاحة حاليًا."
+      );
+    }
+
+    const html = `
+      <div dir="rtl" style="margin:0;padding:32px 16px;background:#f5f5f3;font-family:Arial,Tahoma,sans-serif;color:#171717">
+        <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e7e7e4;border-radius:14px;overflow:hidden">
+
+          <div style="padding:28px 30px;border-bottom:1px solid #eeeeeb">
+            <div style="font-size:12px;color:#8a8a84;margin-bottom:8px">موقع معدن البناء</div>
+            <h2 style="margin:0;font-size:22px;line-height:1.5;color:#171717">
+              طلب دراسة مشروع جديد
+            </h2>
+            <p style="margin:8px 0 0;color:#777;font-size:13px;line-height:1.8">
+              تم استلام طلب جديد لدراسة مشروع من الموقع.
+            </p>
+          </div>
+
+          <div style="padding:26px 30px">
+
+            <div style="margin-bottom:22px">
+              <div style="font-size:12px;color:#8a8a84;margin-bottom:12px">بيانات العميل</div>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                <tr>
+                  <td style="padding:10px 0;width:42%;color:#777;font-size:13px">الاسم</td>
+                  <td style="padding:10px 0;color:#171717;font-size:14px;font-weight:600">
+                    ${escapeProjectStudyHtml(name)}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#777;font-size:13px">رقم الجوال</td>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#171717;font-size:14px;direction:ltr;text-align:right">
+                    ${escapeProjectStudyHtml(phone)}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#777;font-size:13px">البريد الإلكتروني</td>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#171717;font-size:14px;direction:ltr;text-align:right">
+                    ${escapeProjectStudyHtml(email || "غير مضاف")}
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="margin-bottom:22px">
+              <div style="font-size:12px;color:#8a8a84;margin-bottom:12px">تفاصيل المشروع</div>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                <tr>
+                  <td style="padding:10px 0;width:42%;color:#777;font-size:13px">مدينة المشروع</td>
+                  <td style="padding:10px 0;color:#171717;font-size:14px;font-weight:600">
+                    ${escapeProjectStudyHtml(city)}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#777;font-size:13px">عدد الأدوار</td>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#171717;font-size:16px;font-weight:700;direction:ltr;text-align:right">
+                    ${floorCount}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#777;font-size:13px">مستوى التشطيب</td>
+                  <td style="padding:10px 0;border-top:1px solid #f0f0ed;color:#171717;font-size:14px;font-weight:600">
+                    ${escapeProjectStudyHtml(finishLevel)}
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="padding:18px;background:#fafaf8;border:1px solid #eeeeeb;border-radius:10px;margin-bottom:22px">
+              <div style="font-size:12px;color:#8a8a84;margin-bottom:8px">ملاحظات المشروع</div>
+              <div style="font-size:14px;line-height:2;color:#333;white-space:pre-wrap">
+                ${escapeProjectStudyHtml(notes || "لا توجد ملاحظات")}
+              </div>
+            </div>
+
+            <div style="padding:16px 18px;background:#f7f7f4;border-radius:10px">
+              <div style="font-size:13px;color:#555;margin-bottom:6px">المرفقات</div>
+              <div style="font-size:14px;color:#171717;font-weight:600">
+                مخططات المشروع: ${attachments.length} ملف
+                ${billOfQuantitiesAttachment ? " — جدول الكميات: مرفق" : ""}
+              </div>
+            </div>
+
+          </div>
+
+          <div style="padding:18px 30px;border-top:1px solid #eeeeeb;color:#999;font-size:11px;line-height:1.8">
+            تم إرسال هذا الطلب تلقائيًا من موقع معدن البناء.
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    const resendClient = new Resend(resendApiKey);
+
+    const response = await resendClient.emails.send({
+      from: fromEmail,
+      to: [PROJECT_STUDY_RECIPIENT],
+      replyTo: email || undefined,
+      subject: "طلب دراسة مشروع جديد",
+      html,
+      attachments: billOfQuantitiesAttachment
+        ? [...attachments, billOfQuantitiesAttachment]
+        : attachments,
+    });
+
+    if (response?.error) {
+      console.error("[project-study] resend error", response.error);
+      throw new HttpsError(
+        "internal",
+        "تعذر إرسال الطلب حاليًا. يرجى المحاولة مرة أخرى."
+      );
+    }
+
+    console.log("[project-study] submitted", {
+      emailId: response?.data?.id || null,
+      attachmentsCount: attachments.length,
+    });
+
+    return {
+      ok: true,
+      message: "تم استلام طلب دراسة مشروعك بنجاح.",
+    };
+  }
+);
