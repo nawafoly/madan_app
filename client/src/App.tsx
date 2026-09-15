@@ -19,6 +19,7 @@ import Careers from "./pages/Careers";
 import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
 import ProjectDetails from "./pages/ProjectDetails";
+import StartProject from "./pages/StartProject";
 
 import LoginPage from "./pages/Login";
 import RequireRole from "./components/RequireRole";
@@ -254,6 +255,10 @@ function Router() {
           <SiteLayout>
             <Home />
           </SiteLayout>
+        </Route>
+
+        <Route path="/ابدأ-مشروعك">
+          <StartProject />
         </Route>
 
         <Route path="/projects">
