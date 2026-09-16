@@ -3243,14 +3243,9 @@ export default function ProjectDetails() {
                             key={item.label}
                             className="rounded-[24px] bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_18px_40px_-34px_rgba(15,23,42,0.38)] ring-1 ring-slate-200/80"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[12px] font-semibold tracking-[0.12em] text-slate-500">
-                                  {item.label}
-                                </div>
-                                <div className="mt-3 whitespace-nowrap text-[1.35rem] font-semibold tracking-tight text-slate-950 sm:text-[1.5rem]">
-                                  {item.value}
-                                </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-[12px] font-semibold tracking-[0.12em] text-slate-500">
+                                {item.label}
                               </div>
 
                               <span
@@ -3261,6 +3256,10 @@ export default function ProjectDetails() {
                               >
                                 <Icon className="h-5 w-5" />
                               </span>
+                            </div>
+
+                            <div className="mt-3 w-full text-right text-[1.5rem] font-semibold tracking-tight text-slate-950">
+                              {item.value}
                             </div>
 
                             <div className="mt-3 text-xs leading-6 text-slate-500">
