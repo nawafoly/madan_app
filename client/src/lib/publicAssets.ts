@@ -41,6 +41,11 @@ export function normalizePublicAssetPath(src?: unknown, fallback = "") {
   let value = pickAssetPath(src);
   if (!value) return "";
 
+  // Legacy Maedin uploads were moved to the current R2 worker.
+  value = value.replace(
+    /^https:\/\/upload\.maedin\.workers\.dev(?=\/|$)/i,
+    "https://upload.maedin2026.workers.dev"
+  );
   if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith("//")) {
     return value;
   }
