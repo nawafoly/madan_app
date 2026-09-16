@@ -3185,17 +3185,16 @@ export default function ProjectDetails() {
             <div className="lg:sticky lg:top-28">
               <Card className="w-full gap-0 overflow-hidden border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] py-0 shadow-[0_34px_95px_-48px_rgba(15,23,42,0.38)]">
                 {coverImage ? (
-                  <div className="relative h-52 w-full overflow-hidden sm:h-60">
+                  <div className="relative min-h-[330px] w-full overflow-hidden">
                     <img
                       src={coverImage}
                       alt={project?.titleAr || project?.title || "Project"}
-                      className="h-full w-full object-cover"
+                      className="absolute inset-0 h-full w-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-transparent" />
-                  </div>
-                ) : null}
 
-                <CardHeader className="relative overflow-hidden bg-[linear-gradient(145deg,#07111f_0%,#102544_52%,#1b446d_100%)] pb-8 text-white sm:pb-9">
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/45 to-slate-950/10" />
+
+                    <div className="relative z-10 flex min-h-[330px] flex-col justify-end p-6 text-white sm:p-8">
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_30%)]" />
                   <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
 
@@ -3220,8 +3219,10 @@ export default function ProjectDetails() {
                       </CardDescription>
                     </div>
                   </div>
-                </CardHeader>
 
+                    </div>
+                  </div>
+                ) : null}
                 <CardContent className="space-y-8 p-6 sm:p-7 lg:p-8">
                   <section className="space-y-4">
                     <div className="space-y-1">
