@@ -1056,7 +1056,7 @@ export default function ProjectsPage() {
           <h2
             className={cn(
               "mt-4 text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl",
-              inverted ? "text-white" : "text-slate-950"
+              inverted ? "text-white" : "!text-slate-950"
             )}
           >
             {props.title}
@@ -1066,7 +1066,7 @@ export default function ProjectsPage() {
             <p
               className={cn(
                 "mx-auto mt-4 max-w-2xl text-sm leading-8 sm:text-base",
-                inverted ? "text-white/72" : "text-slate-600"
+                inverted ? "text-white/72" : "!text-slate-600"
               )}
             >
               {props.desc}

@@ -3184,6 +3184,17 @@ export default function ProjectDetails() {
           <aside className="mx-auto w-full max-w-[760px] lg:max-w-none">
             <div className="lg:sticky lg:top-28">
               <Card className="w-full gap-0 overflow-hidden border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] py-0 shadow-[0_34px_95px_-48px_rgba(15,23,42,0.38)]">
+                {coverImage ? (
+                  <div className="relative h-52 w-full overflow-hidden sm:h-60">
+                    <img
+                      src={coverImage}
+                      alt={project?.titleAr || project?.title || "Project"}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-transparent" />
+                  </div>
+                ) : null}
+
                 <CardHeader className="relative overflow-hidden bg-[linear-gradient(145deg,#07111f_0%,#102544_52%,#1b446d_100%)] pb-8 text-white sm:pb-9">
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_30%)]" />
                   <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
