@@ -45,6 +45,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workforce_payroll_impacts_operation
 CREATE INDEX IF NOT EXISTS idx_workforce_payroll_impacts_employee_month
   ON workforce_payroll_impacts (tenant_id, employee_id, month_key, status, added_at DESC);
 
+-- Backfill legacy manual adjustments into the canonical impact ledger.
 INSERT OR IGNORE INTO workforce_payroll_impacts (
   id, tenant_id, payroll_entry_id, employee_id, month_key,
   direction, kind, amount_halalas, reason, note,
@@ -81,3 +82,46 @@ SELECT
 FROM workforce_payroll_adjustments a
 JOIN workforce_payroll_entries e
   ON e.tenant_id = a.tenant_id AND e.id = a.payroll_entry_id;
+
+-- Backfill already-calculated automatic impacts so historical locked payroll remains complete.
+INSERT OR IGNORE INTO workforce_payroll_impacts (
+  id, tenant_id, payroll_entry_id, employee_id, month_key,
+  direction, kind, amount_halalas, reason, note,
+  source_type, source_id, automatic, policy_version, operation_id,
+  status, metadata_json, added_by_uid, added_by_email, added_at, updated_at
+)
+SELECT
+  'wf_payroll_impact_' || id || '_overtime', tenant_id, id, employee_id, month_key,
+  'addition', 'overtime', overtime_halalas, 'Overtime', NULL,
+  'payroll_readiness', month_key || ':overtime', 1, NULL, NULL,
+  'active', calculation_snapshot_json, NULL, NULL, created_at, updated_at
+FROM workforce_payroll_entries
+WHERE overtime_halalas > 0;
+
+INSERT OR IGNORE INTO workforce_payroll_impacts (
+  id, tenant_id, payroll_entry_id, employee_id, month_key,
+  direction, kind, amount_halalas, reason, note,
+  source_type, source_id, automatic, policy_version, operation_id,
+  status, metadata_json, added_by_uid, added_by_email, added_at, updated_at
+)
+SELECT
+  'wf_payroll_impact_' || id || '_attendance_deduction', tenant_id, id, employee_id, month_key,
+  'deduction', 'attendance_deduction', attendance_deduction_halalas, 'Attendance deduction', NULL,
+  'payroll_readiness', month_key || ':attendance_deduction', 1, NULL, NULL,
+  'active', calculation_snapshot_json, NULL, NULL, created_at, updated_at
+FROM workforce_payroll_entries
+WHERE attendance_deduction_halalas > 0;
+
+INSERT OR IGNORE INTO workforce_payroll_impacts (
+  id, tenant_id, payroll_entry_id, employee_id, month_key,
+  direction, kind, amount_halalas, reason, note,
+  source_type, source_id, automatic, policy_version, operation_id,
+  status, metadata_json, added_by_uid, added_by_email, added_at, updated_at
+)
+SELECT
+  'wf_payroll_impact_' || id || '_absence_deduction', tenant_id, id, employee_id, month_key,
+  'deduction', 'absence_deduction', absence_deduction_halalas, 'Absence deduction', NULL,
+  'payroll_readiness', month_key || ':absence_deduction', 1, NULL, NULL,
+  'active', calculation_snapshot_json, NULL, NULL, created_at, updated_at
+FROM workforce_payroll_entries
+WHERE absence_deduction_halalas > 0;
