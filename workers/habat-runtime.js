@@ -2,6 +2,7 @@ import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
 import { handleHabatAttendanceV3Request } from "./habat-attendance-v3.js";
 import { handleHabatAttendanceReportingRequest } from "./habat-attendance-reporting.js";
+import { handleHabatAttendanceExtensionsRequest } from "./habat-attendance-extensions.js";
 import { handleHabatPortalRequest } from "./habat-portal.js";
 import { handleHabatWorkforceRequest } from "./habat-workforce-adapter.js";
 import { resolveHabatRequesterContext } from "./habat-auth.js";
@@ -68,8 +69,31 @@ export async function handleHabatRequest(args) {
   }
 
   let response;
+  const usesAttendanceExtensions =
+    pathname === "/attendance/habat/v2/check-in" ||
+    pathname === "/attendance/habat/v2/check-out" ||
+    pathname === "/attendance/habat/v2/locations" ||
+    pathname.startsWith("/attendance/habat/v2/locations/") ||
+    pathname.startsWith("/attendance/habat/v2/location-assignments/") ||
+    pathname === "/attendance/habat/v2/attendance-photos" ||
+    pathname.startsWith("/attendance/habat/v2/attendance-photos/");
 
-  if (pathname.startsWith("/attendance/habat/workforce/")) {
+  if (usesAttendanceExtensions) {
+    try {
+      response = await handleHabatAttendanceExtensionsRequest(habatArgs);
+    } catch (error) {
+      const status = Number(error?.status || 500);
+      const code = String(error?.code || error?.message || "habat_attendance_extension_failed");
+      console.error("[habat-runtime] attendance extension failed", error);
+      response = Response.json(
+        { ok: false, message: code },
+        {
+          status: Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500,
+          headers: { "Cache-Control": "no-store" },
+        }
+      );
+    }
+  } else if (pathname.startsWith("/attendance/habat/workforce/")) {
     response = await handleHabatWorkforceRequest(habatArgs);
   } else if (pathname.startsWith("/attendance/habat/portal/")) {
     response = await handleHabatPortalRequest(habatArgs);
