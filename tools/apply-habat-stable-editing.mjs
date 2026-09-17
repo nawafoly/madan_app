@@ -102,7 +102,7 @@ export default function HabatNumberInput({
         }
         onBlur?.(event);
       }}
-      className={\`h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100 \\${language === "ar" ? "text-right" : "text-left"} \\${className}\`}
+      className={"h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100 " + (language === "ar" ? "text-right" : "text-left") + " " + className}
     />
   );
 }
