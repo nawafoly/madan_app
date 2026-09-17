@@ -139,8 +139,8 @@ function GeofenceMap({
         if (rawY < 0 || rawY >= worldTiles) continue;
         const tileX = ((rawX % worldTiles) + worldTiles) % worldTiles;
         tiles.push({
-          key: \\`${rawX}:\\${rawY}:\\${zoom}\\`,
-          src: \\`https://tile.openstreetmap.org/\\${zoom}/\\${tileX}/\\${rawY}.png\\`,
+          key: [rawX, rawY, zoom].join(":"),
+          src: "https://tile.openstreetmap.org/" + zoom + "/" + tileX + "/" + rawY + ".png",
           left: rawX * TILE_SIZE - left,
           top: rawY * TILE_SIZE - top,
         });
