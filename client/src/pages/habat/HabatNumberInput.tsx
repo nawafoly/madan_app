@@ -23,7 +23,7 @@ function normalizeNumericDraft(value: string) {
 
   const dotIndex = next.indexOf(".");
   if (dotIndex >= 0) {
-    next = next.slice(0, dotIndex + 1) + next.slice(dotIndex + 1).replace(/./g, "");
+    next = next.slice(0, dotIndex + 1) + next.slice(dotIndex + 1).replace(/\./g, "");
   }
 
   return sign + next;
