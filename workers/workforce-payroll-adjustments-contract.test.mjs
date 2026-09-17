@@ -118,7 +118,7 @@ test("payroll UI covers additions, penalties, manual deductions, cancellation, a
     "جزاء",
     "خصم يدوي",
     "استقطاع آخر",
-    "خصم الحضور التلقائي غير مفعل",
+    "مركز الأثر المالي للراتب",
     "تم إلغاء العملية وعكس أثرها",
   ]) {
     assert.ok(ui.includes(required), required);
