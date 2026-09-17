@@ -142,4 +142,17 @@ ui = replaceOnce(ui, tableAnchor, ledgerTable, "canonical financial impact ledge
 
 write(uiPath, ui);
 
+// ---------------------------------------------------------------------------
+// 3) Retire the old UI contract that described automatic impact as unavailable.
+// ---------------------------------------------------------------------------
+const legacyContractPath = "workers/workforce-payroll-adjustments-contract.test.mjs";
+let legacyContract = read(legacyContractPath);
+legacyContract = replaceOnce(
+  legacyContract,
+  '    "خصم الحضور التلقائي غير مفعل",',
+  '    "مركز الأثر المالي للراتب",',
+  "payroll UI contract follows canonical impact center"
+);
+write(legacyContractPath, legacyContract);
+
 console.log("Applied Habat Attendance Core Phase 4: canonical payroll financial impact center now unifies overtime, attendance/absence deductions, and manual adjustments.");
