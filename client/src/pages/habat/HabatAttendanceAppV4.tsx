@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Camera,
   CalendarCheck2,
   CalendarClock,
   ChevronLeft,
@@ -88,6 +89,7 @@ import {
   toDateTimeLocal,
   todayRiyadhKey,
   type HabatAccessAccount,
+  type HabatAttendancePhoto,
   type HabatContext,
   type HabatRecord,
   type HabatReport,
@@ -1064,7 +1066,9 @@ function ManagerRecordsPage() {
   const [status, setStatus] = useState("all");
   const [accounts, setAccounts] = useState<HabatAccessAccount[]>([]);
   const [records, setRecords] = useState<HabatRecord[]>([]);
+  const [photos, setPhotos] = useState<HabatAttendancePhoto[]>([]);
   const [editing, setEditing] = useState<HabatRecord | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<HabatAttendancePhoto | null>(null);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
@@ -1073,12 +1077,16 @@ function ManagerRecordsPage() {
     if (employeeEmail !== "all") params.set("email", employeeEmail);
     if (status !== "all") params.set("status", status);
     try {
-      const [recordPayload, accountPayload] = await Promise.all([
+      const [recordPayload, accountPayload, photoPayload] = await Promise.all([
         habatApi<{ ok: true; records: HabatRecord[] }>(`v2/records?${params.toString()}`),
         habatApi<{ ok: true; accounts: HabatAccessAccount[] }>("access"),
+        habatApi<{ ok: true; photos: HabatAttendancePhoto[] }>("v2/attendance-photos?limit=200"),
       ]);
-      setRecords(recordPayload.records || []);
+      const nextRecords = recordPayload.records || [];
+      const recordIds = new Set(nextRecords.map(record => record.id));
+      setRecords(nextRecords);
       setAccounts(accountPayload.accounts || []);
+      setPhotos((photoPayload.photos || []).filter(photo => recordIds.has(photo.recordId)));
     } catch (caught) { setError(extendedError(caught)); }
   }, [employeeEmail, month, status, today]);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -1089,17 +1097,128 @@ function ManagerRecordsPage() {
     catch (caught) { setError(extendedError(caught)); }
   }
 
-  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="grid gap-3 md:grid-cols-3"><div className="space-y-2"><Label>{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div><div className="space-y-2"><Label>{tr(language, "الموظف", "Employee")}</Label><Select value={employeeEmail} onValueChange={setEmployeeEmail}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{tr(language, "جميع الموظفين", "All Employees")}</SelectItem>{accounts.filter(account => account.isActive).map(account => <SelectItem key={account.id} value={account.email}>{account.displayName || account.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr(language, "الحالة", "Status")}</Label><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{tr(language, "كل الحالات", "All Statuses")}</SelectItem><SelectItem value="present">{tr(language, "حاضر", "Present")}</SelectItem><SelectItem value="late">{tr(language, "متأخر", "Late")}</SelectItem><SelectItem value="early_leave">{tr(language, "انصراف مبكر", "Early Leave")}</SelectItem><SelectItem value="late_early_leave">{tr(language, "متأخر + انصراف مبكر", "Late + Early Leave")}</SelectItem></SelectContent></Select></div></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section><RecordsTable records={records} onEdit={setEditing} onDelete={record => void remove(record)} /><CorrectionDialog record={editing} onClose={() => setEditing(null)} onSaved={refresh} /></div>;
+  return (
+    <div className="space-y-5">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>{tr(language, "الشهر", "Month")}</Label>
+            <HabatDatePicker mode="month" value={month} onChange={setMonth} />
+          </div>
+          <div className="space-y-2">
+            <Label>{tr(language, "الموظف", "Employee")}</Label>
+            <Select value={employeeEmail} onValueChange={setEmployeeEmail}>
+              <SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{tr(language, "جميع الموظفين", "All Employees")}</SelectItem>
+                {accounts.filter(account => account.isActive).map(account => (
+                  <SelectItem key={account.id} value={account.email}>{account.displayName || account.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>{tr(language, "الحالة", "Status")}</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{tr(language, "كل الحالات", "All Statuses")}</SelectItem>
+                <SelectItem value="present">{tr(language, "حاضر", "Present")}</SelectItem>
+                <SelectItem value="late">{tr(language, "متأخر", "Late")}</SelectItem>
+                <SelectItem value="early_leave">{tr(language, "انصراف مبكر", "Early Leave")}</SelectItem>
+                <SelectItem value="late_early_leave">{tr(language, "متأخر + انصراف مبكر", "Late + Early Leave")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      </section>
+
+      <RecordsTable
+        records={records}
+        photos={photos}
+        onPhoto={setSelectedPhoto}
+        onEdit={setEditing}
+        onDelete={record => void remove(record)}
+      />
+
+      <CorrectionDialog record={editing} onClose={() => setEditing(null)} onSaved={refresh} />
+      <AttendancePhotoDialog photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />
+    </div>
+  );
 }
 
-function RecordsTable({ records, onEdit, onDelete }: {
-  records: HabatRecord[]; onEdit?: (record: HabatRecord) => void; onDelete?: (record: HabatRecord) => void }) {
+function AttendancePhotoDialog({ photo, onClose }: { photo: HabatAttendancePhoto | null; onClose: () => void }) {
   const { language } = useLanguage();
+  return (
+    <Dialog open={Boolean(photo)} onOpenChange={open => !open && onClose()}>
+      <DialogContent className={cn("rounded-[28px] p-4 sm:max-w-2xl sm:p-5", language === "ar" ? "text-right" : "text-left")}>
+        <DialogHeader className={language === "ar" ? "text-right" : "text-left"}>
+          <DialogTitle>
+            {photo?.clockType === "check_in"
+              ? tr(language, "صورة الحضور", "Check-in Photo")
+              : tr(language, "صورة الانصراف", "Check-out Photo")}
+          </DialogTitle>
+          <DialogDescription>
+            {photo ? `${photo.displayName || photo.accountEmail || ""} · ${formatDate(photo.attendanceDate)} · ${formatTime(photo.capturedAt)}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {photo ? (
+          <div className="space-y-3">
+            <div className="overflow-hidden rounded-2xl bg-slate-100">
+              <img
+                src={`/habat-api/v2/attendance-photos/${encodeURIComponent(photo.id)}`}
+                alt={photo.displayName || "attendance"}
+                className="max-h-[70vh] w-full object-contain"
+              />
+            </div>
+            {photo.locationName ? (
+              <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                {tr(language, "الموقع", "Location")}: {photo.locationName}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RecordsTable({ records, photos = [], onPhoto, onEdit, onDelete }: {
+  records: HabatRecord[];
+  photos?: HabatAttendancePhoto[];
+  onPhoto?: (photo: HabatAttendancePhoto) => void;
+  onEdit?: (record: HabatRecord) => void;
+  onDelete?: (record: HabatRecord) => void;
+}) {
+  const { language } = useLanguage();
+  const photosByRecord = useMemo(() => {
+    const map = new Map<string, { checkIn?: HabatAttendancePhoto; checkOut?: HabatAttendancePhoto }>();
+    for (const photo of photos) {
+      const current = map.get(photo.recordId) || {};
+      if (photo.clockType === "check_in") current.checkIn = photo;
+      if (photo.clockType === "check_out") current.checkOut = photo;
+      map.set(photo.recordId, current);
+    }
+    return map;
+  }, [photos]);
+
+  const photoButton = (photo: HabatAttendancePhoto | undefined, label: string) =>
+    photo && onPhoto ? (
+      <button
+        type="button"
+        onClick={() => onPhoto(photo)}
+        className="mt-1 inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+      >
+        <Camera className="h-3.5 w-3.5" />
+        {label}
+      </button>
+    ) : null;
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
       <div className="hidden md:block md:overflow-x-auto">
-        <Table className="min-w-[980px]">
+        <Table className="min-w-[1080px]">
           <TableHeader className="bg-slate-50">
             <TableRow>
               <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead>
@@ -1114,80 +1233,111 @@ function RecordsTable({ records, onEdit, onDelete }: {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {records.map(record => (
-              <TableRow key={record.id}>
-                <TableCell>
-                  <p className="font-black">{record.displayName || record.accountEmail}</p>
-                  <p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p>
-                </TableCell>
-                <TableCell>{formatDate(record.attendanceDate)}</TableCell>
-                <TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell>
-                <TableCell>{formatTime(record.checkInAt)}</TableCell>
-                <TableCell>{formatTime(record.checkOutAt)}</TableCell>
-                <TableCell>{formatMinutes(record.lateMinutes, language)}</TableCell>
-                <TableCell>{formatMinutes(record.earlyLeaveMinutes, language)}</TableCell>
-                <TableCell>{formatMinutes(record.workedMinutes, language)}</TableCell>
-                {onEdit || onDelete ? (
+            {records.map(record => {
+              const recordPhotos = photosByRecord.get(record.id) || {};
+              return (
+                <TableRow key={record.id}>
                   <TableCell>
-                    <div className="flex gap-1">
-                      {onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}
-                      {onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}
+                    <p className="font-black">{record.displayName || record.accountEmail}</p>
+                    <p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p>
+                  </TableCell>
+                  <TableCell>{formatDate(record.attendanceDate)}</TableCell>
+                  <TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell>
+                  <TableCell>
+                    <div className="min-w-[105px]">
+                      <p>{formatTime(record.checkInAt)}</p>
+                      {photoButton(recordPhotos.checkIn, tr(language, "عرض الصورة", "View Photo"))}
+                      {recordPhotos.checkIn?.locationName ? <p className="mt-1 max-w-[150px] truncate text-[11px] text-slate-400">{recordPhotos.checkIn.locationName}</p> : null}
                     </div>
                   </TableCell>
-                ) : null}
-              </TableRow>
-            ))}
+                  <TableCell>
+                    <div className="min-w-[105px]">
+                      <p>{formatTime(record.checkOutAt)}</p>
+                      {photoButton(recordPhotos.checkOut, tr(language, "عرض الصورة", "View Photo"))}
+                      {recordPhotos.checkOut?.locationName ? <p className="mt-1 max-w-[150px] truncate text-[11px] text-slate-400">{recordPhotos.checkOut.locationName}</p> : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>{formatMinutes(record.lateMinutes, language)}</TableCell>
+                  <TableCell>{formatMinutes(record.earlyLeaveMinutes, language)}</TableCell>
+                  <TableCell>{formatMinutes(record.workedMinutes, language)}</TableCell>
+                  {onEdit || onDelete ? (
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}
+                        {onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
       <div className="divide-y divide-slate-100 md:hidden">
-        {records.map(record => (
-          <article key={record.id} className="p-4">
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-black text-slate-950">{record.displayName || record.accountEmail}</p>
-                <p className="mt-1 truncate text-xs text-slate-500">{record.accountEmail}</p>
-              </div>
-              <Badge variant="outline" className="shrink-0 rounded-full">
-                {statusLabel(record.attendanceStatus)}
-              </Badge>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
-              {[
-                [tr(language, "التاريخ", "Date"), formatDate(record.attendanceDate)],
-                [tr(language, "الحضور", "Clock In"), formatTime(record.checkInAt)],
-                [tr(language, "الانصراف", "Clock Out"), formatTime(record.checkOutAt)],
-                [tr(language, "ساعات العمل", "Worked"), formatMinutes(record.workedMinutes, language)],
-                [tr(language, "التأخير", "Late"), formatMinutes(record.lateMinutes, language)],
-                [tr(language, "الخروج المبكر", "Early Leave"), formatMinutes(record.earlyLeaveMinutes, language)],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="min-w-0">
-                  <p className="text-[11px] font-semibold text-slate-400">{label}</p>
-                  <p className="mt-1 break-words text-sm font-bold text-slate-800">{value}</p>
+        {records.map(record => {
+          const recordPhotos = photosByRecord.get(record.id) || {};
+          return (
+            <article key={record.id} className="p-4">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-black text-slate-950">{record.displayName || record.accountEmail}</p>
+                  <p className="mt-1 truncate text-xs text-slate-500">{record.accountEmail}</p>
                 </div>
-              ))}
-            </div>
-
-            {onEdit || onDelete ? (
-              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
-                {onEdit ? (
-                  <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => onEdit(record)}>
-                    <Edit3 className="h-4 w-4" />
-                    {tr(language, "تعديل", "Edit")}
-                  </Button>
-                ) : null}
-                {onDelete ? (
-                  <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}>
-                    <Trash2 className="h-4 w-4" />
-                    {tr(language, "حذف", "Delete")}
-                  </Button>
-                ) : null}
+                <Badge variant="outline" className="shrink-0 rounded-full">{statusLabel(record.attendanceStatus)}</Badge>
               </div>
-            ) : null}
-          </article>
-        ))}
+
+              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
+                {[
+                  [tr(language, "التاريخ", "Date"), formatDate(record.attendanceDate)],
+                  [tr(language, "الحضور", "Clock In"), formatTime(record.checkInAt)],
+                  [tr(language, "الانصراف", "Clock Out"), formatTime(record.checkOutAt)],
+                  [tr(language, "ساعات العمل", "Worked"), formatMinutes(record.workedMinutes, language)],
+                  [tr(language, "التأخير", "Late"), formatMinutes(record.lateMinutes, language)],
+                  [tr(language, "الخروج المبكر", "Early Leave"), formatMinutes(record.earlyLeaveMinutes, language)],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="min-w-0">
+                    <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+                    <p className="mt-1 break-words text-sm font-bold text-slate-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {recordPhotos.checkIn || recordPhotos.checkOut ? (
+                <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-3">
+                  {recordPhotos.checkIn ? (
+                    <button type="button" onClick={() => onPhoto?.(recordPhotos.checkIn!)} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-black shadow-sm">
+                      <Camera className="h-4 w-4" /> {tr(language, "صورة الحضور", "Check-in Photo")}
+                    </button>
+                  ) : <div />}
+                  {recordPhotos.checkOut ? (
+                    <button type="button" onClick={() => onPhoto?.(recordPhotos.checkOut!)} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white text-xs font-black shadow-sm">
+                      <Camera className="h-4 w-4" /> {tr(language, "صورة الانصراف", "Check-out Photo")}
+                    </button>
+                  ) : <div />}
+                </div>
+              ) : null}
+
+              {onEdit || onDelete ? (
+                <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
+                  {onEdit ? (
+                    <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => onEdit(record)}>
+                      <Edit3 className="h-4 w-4" />
+                      {tr(language, "تعديل", "Edit")}
+                    </Button>
+                  ) : null}
+                  {onDelete ? (
+                    <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}>
+                      <Trash2 className="h-4 w-4" />
+                      {tr(language, "حذف", "Delete")}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
       </div>
 
       {!records.length ? (
