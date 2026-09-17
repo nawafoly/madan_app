@@ -1,24 +1,33 @@
 import {
+  Camera,
   CheckCircle2,
+  ExternalLink,
   LocateFixed,
   MapPin,
-  Minus,
+  Pencil,
   Plus,
+  RefreshCw,
   Save,
+  Trash2,
+  UserRound,
+  X,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
   friendlyHabatError,
+  formatDate,
+  formatTime,
   habatApi,
+  type HabatAttendanceLocation,
+  type HabatAttendancePhoto,
+  type HabatLocationAccount,
   type HabatSettings,
 } from "./habatAttendanceClient";
 import "./habat-mobile.css";
@@ -26,258 +35,76 @@ import "./habat-mobile.css";
 import HabatNumberInput from "@/pages/habat/HabatNumberInput";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
+
 type Props = {
   onDataChanged?: () => void | Promise<void>;
 };
 
-type Point = {
-  latitude: number;
-  longitude: number;
-};
-
-type Size = {
-  width: number;
-  height: number;
-};
-
-const TILE_SIZE = 256;
-const DEFAULT_CENTER: Point = { latitude: 24.7136, longitude: 46.6753 };
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function project(point: Point, zoom: number) {
-  const scale = TILE_SIZE * 2 ** zoom;
-  const latitude = clamp(point.latitude, -85.05112878, 85.05112878);
-  const sin = Math.sin((latitude * Math.PI) / 180);
-  return {
-    x: ((point.longitude + 180) / 360) * scale,
-    y:
-      (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) *
-      scale,
-  };
-}
-
-function unproject(x: number, y: number, zoom: number): Point {
-  const scale = TILE_SIZE * 2 ** zoom;
-  const longitude = (x / scale) * 360 - 180;
-  const n = Math.PI - (2 * Math.PI * y) / scale;
-  const latitude = (180 / Math.PI) * Math.atan(Math.sinh(n));
-  return {
-    latitude: clamp(latitude, -85.05112878, 85.05112878),
-    longitude: clamp(longitude, -180, 180),
-  };
-}
-
-function metersPerPixel(latitude: number, zoom: number) {
-  return (
-    (156543.03392 * Math.cos((latitude * Math.PI) / 180)) /
-    2 ** zoom
-  );
-}
-
-function GeofenceMap({
-  latitude,
-  longitude,
-  radiusM,
-  onChange,
-}: {
-  latitude: number | null;
-  longitude: number | null;
+type LocationDraft = {
+  id: string | null;
+  name: string;
+  latitude: number | "";
+  longitude: number | "";
   radiusM: number;
-  onChange: (point: Point) => void;
-}) {
-  const { language } = useLanguage();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(17);
-  const [size, setSize] = useState<Size>({ width: 640, height: 330 });
-  const point =
-    latitude == null || longitude == null
-      ? DEFAULT_CENTER
-      : { latitude, longitude };
+};
 
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-
-    const updateSize = () => {
-      const rect = element.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setSize({ width: rect.width, height: rect.height });
-      }
-    };
-
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  const map = useMemo(() => {
-    const center = project(point, zoom);
-    const left = center.x - size.width / 2;
-    const top = center.y - size.height / 2;
-    const right = center.x + size.width / 2;
-    const bottom = center.y + size.height / 2;
-    const worldTiles = 2 ** zoom;
-    const tiles: Array<{
-      key: string;
-      x: number;
-      y: number;
-      src: string;
-      left: number;
-      top: number;
-    }> = [];
-
-    const startX = Math.floor(left / TILE_SIZE);
-    const endX = Math.floor(right / TILE_SIZE);
-    const startY = Math.floor(top / TILE_SIZE);
-    const endY = Math.floor(bottom / TILE_SIZE);
-
-    for (let rawX = startX; rawX <= endX; rawX += 1) {
-      for (let rawY = startY; rawY <= endY; rawY += 1) {
-        if (rawY < 0 || rawY >= worldTiles) continue;
-        const tileX = ((rawX % worldTiles) + worldTiles) % worldTiles;
-        tiles.push({
-          key: `${rawX}:${rawY}:${zoom}`,
-          x: tileX,
-          y: rawY,
-          src: `https://tile.openstreetmap.org/${zoom}/${tileX}/${rawY}.png`,
-          left: rawX * TILE_SIZE - left,
-          top: rawY * TILE_SIZE - top,
-        });
-      }
-    }
-
-    const radiusPx =
-      Math.max(10, Number(radiusM || 0)) /
-      Math.max(0.01, metersPerPixel(point.latitude, zoom));
-
-    return { center, left, top, tiles, radiusPx };
-  }, [point.latitude, point.longitude, radiusM, size.height, size.width, zoom]);
-
-  function choosePoint(event: ReactMouseEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = map.center.x + (event.clientX - rect.left - rect.width / 2);
-    const y = map.center.y + (event.clientY - rect.top - rect.height / 2);
-    onChange(unproject(x, y, zoom));
-  }
-
-  const configured = latitude != null && longitude != null;
-
-  return (
-    <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100">
-      <div
-        ref={containerRef}
-        onClick={choosePoint}
-        className="relative h-[300px] w-full cursor-crosshair overflow-hidden bg-slate-100 sm:h-[360px]"
-        role="application"
-        aria-label={tr(language, "خريطة تحديد نطاق الحضور", "Attendance geofence map")}
-      >
-        {map.tiles.map(tile => (
-          <img
-            key={tile.key}
-            src={tile.src}
-            alt=""
-            draggable={false}
-            className="pointer-events-none absolute h-64 w-64 select-none"
-            style={{ left: tile.left, top: tile.top }}
-          />
-        ))}
-
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/2 rounded-full border-2 border-slate-950/70 bg-slate-950/10"
-          style={{
-            width: map.radiusPx * 2,
-            height: map.radiusPx * 2,
-            transform: "translate(-50%, -50%)",
-          }}
-        />
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-black text-white shadow-lg">
-            <MapPin size={20} />
-          </div>
-        </div>
-
-        <div
-          className="absolute left-3 top-3 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-          onClick={event => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => setZoom(current => Math.min(19, current + 1))}
-            className="flex h-10 w-10 items-center justify-center border-b border-slate-100"
-            aria-label={tr(language, "تكبير الخريطة", "Zoom in map")}
-          >
-            <Plus size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom(current => Math.max(12, current - 1))}
-            className="flex h-10 w-10 items-center justify-center"
-            aria-label={tr(language, "تصغير الخريطة", "Zoom out map")}
-          >
-            <Minus size={18} />
-          </button>
-        </div>
-
-        {!configured ? (
-          <div className="pointer-events-none absolute inset-x-4 bottom-10 rounded-2xl bg-white/95 px-4 py-3 text-center text-sm font-bold shadow-sm">
-            {tr(language, "اضغط على الخريطة لتحديد موقع الفرع", "Click the map to set the branch location")}
-          </div>
-        ) : null}
-
-        <div className="absolute bottom-2 left-2 rounded-md bg-white/90 px-2 py-1 text-[10px] text-slate-600">
-          ©{" "}
-          <a
-            href="https://www.openstreetmap.org/copyright"
-            target="_blank"
-            rel="noreferrer"
-            onClick={event => event.stopPropagation()}
-            className="underline"
-          >
-            OpenStreetMap
-          </a>
-        </div>
-      </div>
-      <div className="grid gap-2 border-t border-slate-200 bg-white px-4 py-3 text-xs sm:grid-cols-2">
-        <p className="truncate text-slate-600">
-          <span className="font-bold text-slate-900">Latitude:</span>{" "}
-          {latitude == null ? tr(language, "غير محدد", "Not Set") : latitude.toFixed(6)}
-        </p>
-        <p className="truncate text-slate-600">
-          <span className="font-bold text-slate-900">Longitude:</span>{" "}
-          {longitude == null ? tr(language, "غير محدد", "Not Set") : longitude.toFixed(6)}
-        </p>
-      </div>
-    </div>
-  );
-}
+const emptyDraft = (): LocationDraft => ({
+  id: null,
+  name: "",
+  latitude: "",
+  longitude: "",
+  radiusM: 100,
+});
 
 export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   const { language } = useLanguage();
+  const [locations, setLocations] = useState<HabatAttendanceLocation[]>([]);
+  const [accounts, setAccounts] = useState<HabatLocationAccount[]>([]);
+  const [photos, setPhotos] = useState<HabatAttendancePhoto[]>([]);
   const [settings, setSettings] = useState<HabatSettings | null>(null);
+  const [draft, setDraft] = useState<LocationDraft>(emptyDraft);
+  const [selectedPhoto, setSelectedPhoto] = useState<HabatAttendancePhoto | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [assignmentBusy, setAssignmentBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     setError("");
     try {
-      const payload = await habatApi<{ ok: true; settings: HabatSettings }>(
-        "v2/settings"
-      );
-      setSettings(payload.settings);
+      const [locationPayload, photoPayload, settingsPayload] = await Promise.all([
+        habatApi<{
+          ok: true;
+          locations: HabatAttendanceLocation[];
+          accounts: HabatLocationAccount[];
+        }>("v2/locations"),
+        habatApi<{ ok: true; photos: HabatAttendancePhoto[] }>(
+          "v2/attendance-photos?limit=60"
+        ),
+        habatApi<{ ok: true; settings: HabatSettings }>("v2/settings"),
+      ]);
+      setLocations(locationPayload.locations || []);
+      setAccounts(locationPayload.accounts || []);
+      setPhotos(photoPayload.photos || []);
+      setSettings(settingsPayload.settings);
     } catch (caught) {
       setError(friendlyHabatError(caught));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const activeLocations = useMemo(
+    () => locations.filter(location => location.isActive),
+    [locations]
+  );
 
   async function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -287,19 +114,14 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
 
     setLocating(true);
     setError("");
-    setMessage("");
     navigator.geolocation.getCurrentPosition(
       position => {
-        setSettings(current =>
-          current
-            ? {
-                ...current,
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              }
-            : current
-        );
-        setMessage(tr(language, "تم وضع مركز النطاق على موقعك الحالي. احفظ الإعدادات لتطبيقه.", "Geofence center set to your current location. Save settings to apply it."));
+        setDraft(current => ({
+          ...current,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }));
+        setMessage(tr(language, "تم وضع الإحداثيات على موقعك الحالي.", "Coordinates set to your current location."));
         setLocating(false);
       },
       () => {
@@ -310,15 +132,11 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
     );
   }
 
-  async function save(event: FormEvent) {
+  async function saveLocation(event: FormEvent) {
     event.preventDefault();
-    if (!settings) return;
-
-    if (
-      settings.locationRequired &&
-      (settings.latitude == null || settings.longitude == null)
-    ) {
-      setError(tr(language, "حدد موقع الفرع على الخريطة قبل تفعيل نطاق الحضور.", "Set the branch location on the map before enabling the attendance geofence."));
+    if (saving) return;
+    if (!draft.name.trim() || draft.latitude === "" || draft.longitude === "") {
+      setError(tr(language, "اكتب اسم الموقع وحدد الإحداثيات.", "Enter a location name and coordinates."));
       return;
     }
 
@@ -326,21 +144,26 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
     setError("");
     setMessage("");
     try {
-      const payload = await habatApi<{ ok: true; settings: HabatSettings }>(
-        "v2/settings",
-        {
+      const payload = {
+        name: draft.name.trim(),
+        latitude: Number(draft.latitude),
+        longitude: Number(draft.longitude),
+        radiusM: Number(draft.radiusM),
+      };
+      if (draft.id) {
+        await habatApi(`v2/locations/${encodeURIComponent(draft.id)}`, {
           method: "PATCH",
-          body: JSON.stringify({
-            locationRequired: settings.locationRequired,
-            latitude: settings.latitude,
-            longitude: settings.longitude,
-            radiusM: settings.radiusM,
-            maxAccuracyM: settings.maxAccuracyM,
-          }),
-        }
-      );
-      setSettings(payload.settings);
-      setMessage(tr(language, "تم حفظ موقع الفرع ونطاق الحضور بنجاح.", "Branch location and attendance geofence saved successfully."));
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await habatApi("v2/locations", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      setDraft(emptyDraft());
+      setMessage(tr(language, "تم حفظ موقع البصمة.", "Attendance location saved."));
+      await refresh();
       await onDataChanged?.();
     } catch (caught) {
       setError(friendlyHabatError(caught));
@@ -349,238 +172,485 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
     }
   }
 
-  if (!settings) {
+  function editLocation(location: HabatAttendanceLocation) {
+    setDraft({
+      id: location.id,
+      name: location.name,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      radiusM: location.radiusM,
+    });
+    setError("");
+    setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function deactivateLocation(location: HabatAttendanceLocation) {
+    if (!window.confirm(tr(language, `تعطيل موقع «${location.name}»؟ سيتم إلغاء تعيينه من الموظفين.`, `Disable “${location.name}”? It will be unassigned from employees.`))) return;
+    setSaving(true);
+    setError("");
+    try {
+      await habatApi(`v2/locations/${encodeURIComponent(location.id)}`, {
+        method: "DELETE",
+      });
+      await refresh();
+      await onDataChanged?.();
+    } catch (caught) {
+      setError(friendlyHabatError(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleAssignment(
+    account: HabatLocationAccount,
+    locationId: string,
+    checked: boolean
+  ) {
+    if (assignmentBusy) return;
+    setAssignmentBusy(account.id);
+    setError("");
+    const nextIds = checked
+      ? Array.from(new Set([...account.locationIds, locationId]))
+      : account.locationIds.filter(id => id !== locationId);
+
+    try {
+      await habatApi(
+        `v2/location-assignments/${encodeURIComponent(account.id)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ locationIds: nextIds }),
+        }
+      );
+      setAccounts(current =>
+        current.map(item =>
+          item.id === account.id ? { ...item, locationIds: nextIds } : item
+        )
+      );
+      setMessage(tr(language, "تم تحديث مواقع الموظف المسموحة.", "Employee attendance locations updated."));
+      await onDataChanged?.();
+    } catch (caught) {
+      setError(friendlyHabatError(caught));
+    } finally {
+      setAssignmentBusy(null);
+    }
+  }
+
+  async function saveGpsPolicy() {
+    if (!settings || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const payload = await habatApi<{ ok: true; settings: HabatSettings }>(
+        "v2/settings",
+        {
+          method: "PATCH",
+          body: JSON.stringify({ maxAccuracyM: settings.maxAccuracyM }),
+        }
+      );
+      setSettings(payload.settings);
+      setMessage(tr(language, "تم حفظ سياسة دقة GPS.", "GPS accuracy policy saved."));
+    } catch (caught) {
+      setError(friendlyHabatError(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
     return (
-      <section className="rounded-[24px] border border-slate-200 bg-white p-5 text-center shadow-sm sm:p-6">
-        <p className="py-8 text-sm font-semibold text-slate-500">{tr(language, "جاري تحميل إعدادات الحضور...", "Loading attendance settings...")}</p>
+      <section className="rounded-[24px] border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <RefreshCw className="mx-auto h-6 w-6 animate-spin text-slate-400" />
+        <p className="mt-3 text-sm font-semibold text-slate-500">
+          {tr(language, "جاري تحميل مواقع البصمة...", "Loading attendance locations...")}
+        </p>
       </section>
     );
   }
 
-  const updatePoint = (point: Point) => {
-    setSettings(current =>
-      current
-        ? {
-            ...current,
-            latitude: point.latitude,
-            longitude: point.longitude,
-          }
-        : current
-    );
-    setMessage("");
-  };
-
   return (
-    <div dir={languageDir(language)} className="space-y-4 text-start sm:space-y-6">
-      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6">
-        <div className="mb-5 min-w-0">
-          <h2 className="text-xl font-black">{tr(language, "إعدادات الحضور", "Attendance Settings")}</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            {tr(language, "حدد موقع الفرع من الخريطة ثم اضبط نصف قطر الحضور ودقة GPS.", "Set the branch location on the map, then configure the attendance radius and GPS accuracy.")}
-          </p>
+    <div dir={languageDir(language)} className="space-y-6 text-start">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-black">
+              {tr(language, "مواقع البصمة", "Attendance Locations")}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {tr(language, "أضف أكثر من موقع وحدد نطاق كل موقع، ثم اربط كل موظف بالمواقع المسموحة له.", "Add multiple locations, set each geofence radius, then assign employees to the locations they may use.")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black"
+          >
+            <RefreshCw size={17} />
+            {tr(language, "تحديث", "Refresh")}
+          </button>
         </div>
 
-        <form onSubmit={save} className="space-y-5">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <label className="flex min-w-0 items-start gap-3">
-              <input
-                type="checkbox"
-                checked={settings.locationRequired}
-                onChange={event =>
-                  setSettings({
-                    ...settings,
-                    locationRequired: event.target.checked,
-                  })
-                }
-                className="mt-0.5 h-5 w-5 shrink-0"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-black leading-6 sm:text-base">
-                  {tr(language, "إلزام الموظف بالتواجد داخل نطاق الفرع وقت البصمة", "Require employee to be inside the branch geofence when clocking")}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  {tr(language, "عند التفعيل يتم فحص الموقع فعليًا في السيرفر، وليس في الواجهة فقط.", "When enabled, location is validated by the server, not only the interface.")}
-                </span>
-              </span>
-            </label>
-          </div>
-
-          <div>
-            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h3 className="font-black">{tr(language, "موقع الفرع ونطاق الحضور", "Branch Location and Attendance Geofence")}</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  {tr(language, "اضغط على أي نقطة بالخريطة لتحديد مركز النطاق. الدائرة تمثل المسافة المسموح بها.", "Click anywhere on the map to set the geofence center. The circle represents the allowed distance.")}
-                </p>
-              </div>
+        <form onSubmit={saveLocation} className="mt-6 rounded-2xl bg-slate-50 p-4 sm:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="font-black">
+              {draft.id
+                ? tr(language, "تعديل موقع البصمة", "Edit Attendance Location")
+                : tr(language, "إضافة موقع بصمة", "Add Attendance Location")}
+            </h3>
+            {draft.id ? (
               <button
                 type="button"
-                onClick={() => void useCurrentLocation()}
-                disabled={locating}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black sm:w-auto"
+                onClick={() => setDraft(emptyDraft())}
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-500"
               >
-                <LocateFixed size={18} />
-                {locating ? tr(language, "جاري تحديد الموقع...", "Locating...") : tr(language, "استخدام موقعي الحالي", "Use My Current Location")}
+                <X size={15} /> {tr(language, "إلغاء التعديل", "Cancel Edit")}
               </button>
-            </div>
-
-            <GeofenceMap
-              latitude={settings.latitude}
-              longitude={settings.longitude}
-              radiusM={settings.radiusM}
-              onChange={updatePoint}
-            />
+            ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="min-w-0 text-sm font-bold">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-bold sm:col-span-2">
+              {tr(language, "اسم الموقع", "Location Name")}
+              <input
+                value={draft.name}
+                onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}
+                placeholder={tr(language, "مثال: الفرع الرئيسي", "Example: Main Branch")}
+                className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-slate-900"
+              />
+            </label>
+
+            <label className="text-sm font-bold">
               Latitude
               <HabatNumberInput
                 inputMode="decimal"
                 step="any"
-                value={settings.latitude ?? ""}
+                value={draft.latitude}
                 onValueChange={value =>
-                  setSettings({
-                    ...settings,
-                    latitude:
-                      value === ""
-                        ? null
-                        : Number(value),
-                  })
+                  setDraft(current => ({
+                    ...current,
+                    latitude: value === "" ? "" : Number(value),
+                  }))
                 }
-                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
+                className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
               />
             </label>
-            <label className="min-w-0 text-sm font-bold">
+
+            <label className="text-sm font-bold">
               Longitude
               <HabatNumberInput
                 inputMode="decimal"
                 step="any"
-                value={settings.longitude ?? ""}
+                value={draft.longitude}
                 onValueChange={value =>
-                  setSettings({
-                    ...settings,
-                    longitude:
-                      value === ""
-                        ? null
-                        : Number(value),
-                  })
+                  setDraft(current => ({
+                    ...current,
+                    longitude: value === "" ? "" : Number(value),
+                  }))
                 }
-                className="mt-2 h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
+                className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-start outline-none focus:border-slate-900"
               />
             </label>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-black">{tr(language, "نصف قطر الحضور", "Attendance Radius")}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {tr(language, "المسافة القصوى المسموح للموظف أن يبتعدها عن مركز الفرع.", "Maximum distance an employee may be from the branch center.")}
-                </p>
-              </div>
-              <div className="shrink-0 rounded-xl bg-black px-3 py-2 text-sm font-black text-white">
-                {Math.round(settings.radiusM)} {tr(language, "م", "m")}
-              </div>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={1000}
-              step={10}
-              value={clamp(Number(settings.radiusM || 100), 10, 1000)}
-              onChange={event =>
-                setSettings({ ...settings, radiusM: Number(event.target.value) })
-              }
-              className="mt-4 w-full"
-            />
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              {[50, 100, 150, 200].map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSettings({ ...settings, radiusM: value })}
-                  className={
-                    Math.round(settings.radiusM) === value
-                      ? "rounded-xl bg-black px-2 py-2 text-xs font-black text-white"
-                      : "rounded-xl bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700"
+            <label className="text-sm font-bold sm:col-span-2">
+              {tr(language, "نطاق البصمة بالمتر", "Geofence Radius in Meters")}
+              <div className="mt-2 flex items-center gap-3">
+                <input
+                  type="range"
+                  min={10}
+                  max={1000}
+                  step={10}
+                  value={Math.min(1000, Math.max(10, Number(draft.radiusM || 100)))}
+                  onChange={event => setDraft(current => ({ ...current, radiusM: Number(event.target.value) }))}
+                  className="min-w-0 flex-1"
+                />
+                <HabatNumberInput
+                  min={10}
+                  max={5000}
+                  value={draft.radiusM}
+                  onValueChange={value =>
+                    setDraft(current => ({ ...current, radiusM: Math.min(5000, Math.max(10, Number(value) || 10)) }))
                   }
-                >
-                  {value} {tr(language, "م", "m")}
-                </button>
-              ))}
-            </div>
-            <label className="mt-4 block text-xs font-bold text-slate-600">
-              {tr(language, "قيمة مخصصة بالمتر", "Custom Value in Meters")}
-              <HabatNumberInput
-                min={10}
-                max={5000}
-                value={settings.radiusM}
-                onValueChange={value =>
-                  setSettings({
-                    ...settings,
-                    radiusM: clamp(Number(value) || 10, 10, 5000),
-                  })
-                }
-                className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-start text-sm"
-              />
+                  className="h-11 w-24 rounded-xl border border-slate-200 bg-white px-2 text-center"
+                />
+              </div>
             </label>
           </div>
 
-          <label className="block text-sm font-bold">
-            {tr(language, "أقصى دقة GPS مقبولة بالمتر", "Maximum Accepted GPS Accuracy in Meters")}
-            <HabatNumberInput
-              min={10}
-              max={1000}
-              value={settings.maxAccuracyM}
-              onValueChange={value =>
-                setSettings({
-                  ...settings,
-                  maxAccuracyM: clamp(
-                    Number(value) || 10,
-                    10,
-                    1000
-                  ),
-                })
-              }
-              className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-3 text-start"
-            />
-            <span className="mt-2 block text-xs font-normal leading-5 text-slate-500">
-              {tr(language, "إذا كانت دقة جهاز الموظف أسوأ من هذه القيمة، يتم رفض البصمة حتى يتحسن GPS.", "If the device GPS accuracy is worse than this value, attendance is rejected until GPS accuracy improves.")}
-            </span>
-          </label>
-
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <div className="flex items-center gap-2">
-              <MapPin size={16} className="shrink-0" />
-              <span>{tr(language, "المنطقة الزمنية: Asia/Riyadh", "Timezone: Asia/Riyadh")}</span>
-            </div>
-          </div>
-
-          {message ? (
-            <p className="flex items-start gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-800">
-              <CheckCircle2 size={17} className="mt-1 shrink-0" />
-              <span>{message}</span>
-            </p>
-          ) : null}
-
-          {error ? (
-            <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700">
-              {error}
-            </p>
-          ) : null}
-
-          <div className="habat-settings-savebar -mx-1 rounded-2xl bg-white/95 p-1 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
-              disabled={saving}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-black px-5 font-black text-white disabled:opacity-50 sm:w-auto"
+              type="button"
+              onClick={() => void useCurrentLocation()}
+              disabled={locating}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black disabled:opacity-50"
             >
-              <Save size={18} />
-              {saving ? tr(language, "جاري الحفظ...", "Saving...") : tr(language, "حفظ إعدادات الحضور", "Save Attendance Settings")}
+              <LocateFixed size={17} />
+              {locating
+                ? tr(language, "جاري تحديد الموقع...", "Locating...")
+                : tr(language, "استخدام موقعي الحالي", "Use My Current Location")}
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-5 text-sm font-black text-white disabled:opacity-50"
+            >
+              {draft.id ? <Save size={17} /> : <Plus size={17} />}
+              {draft.id
+                ? tr(language, "حفظ التعديل", "Save Changes")
+                : tr(language, "إضافة الموقع", "Add Location")}
             </button>
           </div>
         </form>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+          {locations.length ? locations.map(location => (
+            <article
+              key={location.id}
+              className={`rounded-2xl border p-4 ${location.isActive ? "border-slate-200" : "border-slate-100 bg-slate-50 opacity-60"}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <MapPin size={17} className="shrink-0" />
+                    <h4 className="truncate font-black">{location.name}</h4>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-slate-600">
+                    {tr(language, "النطاق", "Radius")}: {Math.round(location.radiusM)} {tr(language, "م", "m")}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${location.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                  {location.isActive ? tr(language, "مفعل", "Active") : tr(language, "معطل", "Disabled")}
+                </span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => editLocation(location)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
+                >
+                  <Pencil size={14} /> {tr(language, "تعديل", "Edit")}
+                </button>
+                <a
+                  href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
+                >
+                  <ExternalLink size={14} /> {tr(language, "فتح بالخريطة", "Open Map")}
+                </a>
+                {location.isActive ? (
+                  <button
+                    type="button"
+                    onClick={() => void deactivateLocation(location)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 px-3 text-xs font-black text-red-700"
+                  >
+                    <Trash2 size={14} /> {tr(language, "تعطيل", "Disable")}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          )) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500 lg:col-span-2">
+              {tr(language, "لا توجد مواقع بصمة بعد. أضف الموقع الأول بالأعلى.", "No attendance locations yet. Add the first location above.")}
+            </div>
+          )}
+        </div>
       </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div>
+          <h2 className="text-xl font-black">
+            {tr(language, "تعيين المواقع للموظفين", "Assign Locations to Employees")}
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {tr(language, "يمكن ربط الموظف بموقع واحد أو أكثر. البصمة تُقبل فقط داخل أحد المواقع المحددة له.", "An employee can be assigned to one or more locations. Clocking is accepted only inside an assigned location.")}
+          </p>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {accounts.map(account => (
+            <article key={account.id} className="rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                  <UserRound size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-black">{account.displayName || account.email}</p>
+                  <p className="truncate text-xs text-slate-500">{account.email}</p>
+                </div>
+                {account.locationIds.length === 0 ? (
+                  <span className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700">
+                    {tr(language, "بدون موقع", "No Location")}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700">
+                    {account.locationIds.length} {tr(language, "موقع", "Location")}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {activeLocations.map(location => {
+                  const checked = account.locationIds.includes(location.id);
+                  return (
+                    <label
+                      key={location.id}
+                      className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-bold ${checked ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={assignmentBusy === account.id}
+                        onChange={event =>
+                          void toggleAssignment(account, location.id, event.target.checked)
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="truncate">{location.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {settings ? (
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <h2 className="text-xl font-black">{tr(language, "دقة GPS", "GPS Accuracy")}</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {tr(language, "إذا كانت دقة جهاز الموظف أسوأ من الحد المحدد، تُرفض البصمة حتى تتحسن الإشارة.", "If the employee device accuracy is worse than this limit, clocking is rejected until GPS accuracy improves.")}
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="text-sm font-bold">
+              {tr(language, "أقصى دقة مقبولة بالمتر", "Maximum Accepted Accuracy (m)")}
+              <HabatNumberInput
+                min={10}
+                max={1000}
+                value={settings.maxAccuracyM}
+                onValueChange={value =>
+                  setSettings(current =>
+                    current
+                      ? { ...current, maxAccuracyM: Math.min(1000, Math.max(10, Number(value) || 10)) }
+                      : current
+                  )
+                }
+                className="mt-2 h-11 w-40 rounded-xl border border-slate-200 px-3 text-center"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveGpsPolicy()}
+              disabled={saving}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-black px-5 text-sm font-black text-white disabled:opacity-50"
+            >
+              <Save size={17} /> {tr(language, "حفظ", "Save")}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">
+              {tr(language, "صور الحضور والانصراف", "Attendance Photos")}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {tr(language, "الصور محفوظة بشكل خاص في R2 ولا تُعرض إلا من داخل النظام للمستخدم المصرح له.", "Photos are stored privately in R2 and are only served through the authorized system.")}
+            </p>
+          </div>
+          <Camera className="h-6 w-6 shrink-0 text-slate-400" />
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {photos.length ? photos.map(photo => (
+            <button
+              key={photo.id}
+              type="button"
+              onClick={() => setSelectedPhoto(photo)}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-start transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="aspect-[4/3] bg-slate-100">
+                <img
+                  src={`/habat-api/v2/attendance-photos/${encodeURIComponent(photo.id)}`}
+                  alt={photo.displayName || "attendance"}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="p-3">
+                <p className="truncate text-sm font-black">{photo.displayName || photo.accountEmail}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {photo.clockType === "check_in"
+                    ? tr(language, "حضور", "Check-in")
+                    : tr(language, "انصراف", "Check-out")}
+                  {" · "}{formatDate(photo.attendanceDate)}{" · "}{formatTime(photo.capturedAt)}
+                </p>
+                {photo.locationName ? (
+                  <p className="mt-1 truncate text-xs font-bold text-slate-600">
+                    <MapPin className="me-1 inline h-3.5 w-3.5" />{photo.locationName}
+                  </p>
+                ) : null}
+              </div>
+            </button>
+          )) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500 sm:col-span-2 lg:col-span-3 xl:col-span-4">
+              {tr(language, "لا توجد صور بصمات محفوظة حتى الآن.", "No attendance photos have been saved yet.")}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {message ? (
+        <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-xl">
+          <CheckCircle2 size={17} /> {message}
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="fixed bottom-5 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-2xl bg-red-700 px-5 py-3 text-center text-sm font-black text-white shadow-xl">
+          {error}
+        </div>
+      ) : null}
+
+      {selectedPhoto ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="relative max-h-[94vh] w-full max-w-4xl" onClick={event => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute -top-2 end-0 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg"
+            >
+              <X size={20} />
+            </button>
+            <img
+              src={`/habat-api/v2/attendance-photos/${encodeURIComponent(selectedPhoto.id)}`}
+              alt={selectedPhoto.displayName || "attendance"}
+              className="mx-auto max-h-[82vh] max-w-full rounded-2xl object-contain"
+            />
+            <div className="mx-auto mt-3 max-w-xl rounded-2xl bg-white p-4 text-center text-slate-900">
+              <p className="font-black">{selectedPhoto.displayName || selectedPhoto.accountEmail}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {selectedPhoto.clockType === "check_in"
+                  ? tr(language, "صورة الحضور", "Check-in Photo")
+                  : tr(language, "صورة الانصراف", "Check-out Photo")}
+                {" · "}{formatDate(selectedPhoto.attendanceDate)}{" · "}{formatTime(selectedPhoto.capturedAt)}
+              </p>
+              {selectedPhoto.locationName ? (
+                <p className="mt-1 text-sm font-bold">{selectedPhoto.locationName}</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
