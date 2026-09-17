@@ -80,14 +80,20 @@ async function getPayrollAdjustmentWorkspace(db, tenantId, employeeId, monthKey)
   ]);
 
   let adjustments = [];
+  let impactRows = [];
   if (entry?.id) {
-    const result = await db
-      .prepare(`SELECT * FROM workforce_payroll_adjustments
-                 WHERE tenant_id = ? AND employee_id = ? AND payroll_entry_id = ?
-                 ORDER BY added_at DESC, id DESC`)
-      .bind(tenantId, employeeId, entry.id)
-      .all();
-    adjustments = result?.results || [];
+    const [legacyResult, impactResult] = await Promise.all([
+      db.prepare(`SELECT * FROM workforce_payroll_adjustments
+                   WHERE tenant_id = ? AND employee_id = ? AND payroll_entry_id = ?
+                   ORDER BY added_at DESC, id DESC`)
+        .bind(tenantId, employeeId, entry.id).all(),
+      db.prepare(`SELECT * FROM workforce_payroll_impacts
+                   WHERE tenant_id = ? AND employee_id = ? AND payroll_entry_id = ?
+                   ORDER BY added_at DESC, id DESC`)
+        .bind(tenantId, employeeId, entry.id).all(),
+    ]);
+    adjustments = legacyResult?.results || [];
+    impactRows = impactResult?.results || [];
   }
 
   const settingsPreview = payrollSettingsPreview(settings);
@@ -128,7 +134,7 @@ async function getPayrollAdjustmentWorkspace(db, tenantId, employeeId, monthKey)
     locked,
     lockedReason: locked ? "payroll_entry_not_draft" : null,
     automaticAttendanceDeductionApplied: false,
-    impactLedger: buildCanonicalPayrollImpactLedger({ entry, manualAdjustments: adjustments }),
+    impactLedger: buildCanonicalPayrollImpactLedger({ entry, impactRows: impactRows.length ? impactRows : null, manualAdjustments: adjustments }),
   };
 }
 
@@ -191,6 +197,21 @@ async function createManualAdjustment(db, tenantId, employeeId, monthKey, body, 
       now
     );
 
+  const impactInsert = db.prepare(`INSERT INTO workforce_payroll_impacts (
+    id, tenant_id, payroll_entry_id, employee_id, month_key, direction, kind,
+    amount_halalas, reason, note, source_type, source_id, automatic, policy_version,
+    operation_id, status, metadata_json, added_by_uid, added_by_email, added_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, 0, NULL, ?, 'active', ?, ?, ?, ?, ?)
+  ON CONFLICT(tenant_id, payroll_entry_id, source_type, source_id) DO UPDATE SET
+    amount_halalas = excluded.amount_halalas, reason = excluded.reason, note = excluded.note,
+    operation_id = excluded.operation_id, status = 'active', metadata_json = excluded.metadata_json,
+    added_by_uid = excluded.added_by_uid, added_by_email = excluded.added_by_email, updated_at = excluded.updated_at`)
+    .bind(
+      adjustmentId, tenantId, entry.id, employeeId, monthKey, direction, kind,
+      amountHalalas, reason, note, adjustmentId, operationId,
+      JSON.stringify({ source: 'manual_adjustment', canonicalImpactLedger: true }),
+      principal?.uid || null, principal?.email || null, now, now
+    );
   const recompute = buildRecomputeEntryStatement(db, tenantId, entry.id, now);
   const audit = buildAuditStatement(db, {
     tenantId,
@@ -202,7 +223,7 @@ async function createManualAdjustment(db, tenantId, employeeId, monthKey, body, 
     metadata: { automaticAttendanceDeductionApplied: false },
   });
 
-  await runBatch(db, [insert, recompute, audit]);
+  await runBatch(db, [insert, impactInsert, recompute, audit]);
   const adjustment = await requireAdjustment(db, tenantId, employeeId, adjustmentId);
   return {
     idempotent: false,
@@ -233,6 +254,11 @@ async function cancelManualAdjustment(db, tenantId, employeeId, adjustmentId, pr
                                     cancelled_by_uid = ?, cancelled_by_email = ?, updated_at = ?
                               WHERE tenant_id = ? AND employee_id = ? AND id = ?`)
     .bind(now, principal?.uid || null, principal?.email || null, now, tenantId, employeeId, adjustmentId);
+  const impactCancel = db.prepare(`UPDATE workforce_payroll_impacts
+                                SET status = 'cancelled', cancelled_at = ?,
+                                    cancelled_by_uid = ?, cancelled_by_email = ?, updated_at = ?
+                              WHERE tenant_id = ? AND employee_id = ? AND id = ? AND automatic = 0`)
+    .bind(now, principal?.uid || null, principal?.email || null, now, tenantId, employeeId, adjustmentId);
   const recompute = buildRecomputeEntryStatement(db, tenantId, entry.id, now);
   const audit = buildAuditStatement(db, {
     tenantId,
@@ -244,7 +270,7 @@ async function cancelManualAdjustment(db, tenantId, employeeId, adjustmentId, pr
     after: { ...mapAdjustment(adjustment), status: "cancelled", cancelledAt: now },
   });
 
-  await runBatch(db, [cancel, recompute, audit]);
+  await runBatch(db, [cancel, impactCancel, recompute, audit]);
   const next = await requireAdjustment(db, tenantId, employeeId, adjustmentId);
   return {
     idempotent: false,
