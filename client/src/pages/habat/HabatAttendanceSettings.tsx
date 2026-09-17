@@ -1,5 +1,4 @@
 import {
-  Camera,
   CheckCircle2,
   ExternalLink,
   LocateFixed,
@@ -22,11 +21,8 @@ import {
 
 import {
   friendlyHabatError,
-  formatDate,
-  formatTime,
   habatApi,
   type HabatAttendanceLocation,
-  type HabatAttendancePhoto,
   type HabatLocationAccount,
   type HabatSettings,
 } from "./habatAttendanceClient";
@@ -60,10 +56,8 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   const { language } = useLanguage();
   const [locations, setLocations] = useState<HabatAttendanceLocation[]>([]);
   const [accounts, setAccounts] = useState<HabatLocationAccount[]>([]);
-  const [photos, setPhotos] = useState<HabatAttendancePhoto[]>([]);
   const [settings, setSettings] = useState<HabatSettings | null>(null);
   const [draft, setDraft] = useState<LocationDraft>(emptyDraft);
-  const [selectedPhoto, setSelectedPhoto] = useState<HabatAttendancePhoto | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -75,20 +69,16 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
     setLoading(true);
     setError("");
     try {
-      const [locationPayload, photoPayload, settingsPayload] = await Promise.all([
+      const [locationPayload, settingsPayload] = await Promise.all([
         habatApi<{
           ok: true;
           locations: HabatAttendanceLocation[];
           accounts: HabatLocationAccount[];
         }>("v2/locations"),
-        habatApi<{ ok: true; photos: HabatAttendancePhoto[] }>(
-          "v2/attendance-photos?limit=60"
-        ),
         habatApi<{ ok: true; settings: HabatSettings }>("v2/settings"),
       ]);
       setLocations(locationPayload.locations || []);
       setAccounts(locationPayload.accounts || []);
-      setPhotos(photoPayload.photos || []);
       setSettings(settingsPayload.settings);
     } catch (caught) {
       setError(friendlyHabatError(caught));
@@ -108,7 +98,13 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
 
   async function useCurrentLocation() {
     if (!navigator.geolocation) {
-      setError(tr(language, "المتصفح لا يدعم تحديد الموقع.", "This browser does not support geolocation."));
+      setError(
+        tr(
+          language,
+          "المتصفح لا يدعم تحديد الموقع.",
+          "This browser does not support geolocation."
+        )
+      );
       return;
     }
 
@@ -121,11 +117,23 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         }));
-        setMessage(tr(language, "تم وضع الإحداثيات على موقعك الحالي.", "Coordinates set to your current location."));
+        setMessage(
+          tr(
+            language,
+            "تم وضع الإحداثيات على موقعك الحالي.",
+            "Coordinates set to your current location."
+          )
+        );
         setLocating(false);
       },
       () => {
-        setError(tr(language, "تعذر الحصول على الموقع. اسمح للموقع من إعدادات المتصفح.", "Unable to get your location. Allow location access in browser settings."));
+        setError(
+          tr(
+            language,
+            "تعذر الحصول على الموقع. اسمح للموقع من إعدادات المتصفح.",
+            "Unable to get your location. Allow location access in browser settings."
+          )
+        );
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -135,14 +143,22 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   async function saveLocation(event: FormEvent) {
     event.preventDefault();
     if (saving) return;
+
     if (!draft.name.trim() || draft.latitude === "" || draft.longitude === "") {
-      setError(tr(language, "اكتب اسم الموقع وحدد الإحداثيات.", "Enter a location name and coordinates."));
+      setError(
+        tr(
+          language,
+          "اكتب اسم الموقع وحدد الإحداثيات.",
+          "Enter a location name and coordinates."
+        )
+      );
       return;
     }
 
     setSaving(true);
     setError("");
     setMessage("");
+
     try {
       const payload = {
         name: draft.name.trim(),
@@ -150,6 +166,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
         longitude: Number(draft.longitude),
         radiusM: Number(draft.radiusM),
       };
+
       if (draft.id) {
         await habatApi(`v2/locations/${encodeURIComponent(draft.id)}`, {
           method: "PATCH",
@@ -161,6 +178,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           body: JSON.stringify(payload),
         });
       }
+
       setDraft(emptyDraft());
       setMessage(tr(language, "تم حفظ موقع البصمة.", "Attendance location saved."));
       await refresh();
@@ -186,7 +204,18 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
   }
 
   async function deactivateLocation(location: HabatAttendanceLocation) {
-    if (!window.confirm(tr(language, `تعطيل موقع «${location.name}»؟ سيتم إلغاء تعيينه من الموظفين.`, `Disable “${location.name}”? It will be unassigned from employees.`))) return;
+    if (
+      !window.confirm(
+        tr(
+          language,
+          `تعطيل موقع «${location.name}»؟ سيتم إلغاء تعيينه من الموظفين.`,
+          `Disable “${location.name}”? It will be unassigned from employees.`
+        )
+      )
+    ) {
+      return;
+    }
+
     setSaving(true);
     setError("");
     try {
@@ -208,8 +237,10 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
     checked: boolean
   ) {
     if (assignmentBusy) return;
+
     setAssignmentBusy(account.id);
     setError("");
+
     const nextIds = checked
       ? Array.from(new Set([...account.locationIds, locationId]))
       : account.locationIds.filter(id => id !== locationId);
@@ -222,12 +253,20 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
           body: JSON.stringify({ locationIds: nextIds }),
         }
       );
+
       setAccounts(current =>
         current.map(item =>
           item.id === account.id ? { ...item, locationIds: nextIds } : item
         )
       );
-      setMessage(tr(language, "تم تحديث مواقع الموظف المسموحة.", "Employee attendance locations updated."));
+
+      setMessage(
+        tr(
+          language,
+          "تم تحديث مواقع الموظف المسموحة.",
+          "Employee attendance locations updated."
+        )
+      );
       await onDataChanged?.();
     } catch (caught) {
       setError(friendlyHabatError(caught));
@@ -238,6 +277,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
 
   async function saveGpsPolicy() {
     if (!settings || saving) return;
+
     setSaving(true);
     setError("");
     try {
@@ -262,7 +302,7 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
       <section className="rounded-[24px] border border-slate-200 bg-white p-8 text-center shadow-sm">
         <RefreshCw className="mx-auto h-6 w-6 animate-spin text-slate-400" />
         <p className="mt-3 text-sm font-semibold text-slate-500">
-          {tr(language, "جاري تحميل مواقع البصمة...", "Loading attendance locations...")}
+          {tr(language, "جاري تحميل إعدادات البصمة...", "Loading attendance settings...")}
         </p>
       </section>
     );
@@ -277,7 +317,11 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
               {tr(language, "مواقع البصمة", "Attendance Locations")}
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              {tr(language, "أضف أكثر من موقع وحدد نطاق كل موقع، ثم اربط كل موظف بالمواقع المسموحة له.", "Add multiple locations, set each geofence radius, then assign employees to the locations they may use.")}
+              {tr(
+                language,
+                "إدارة المواقع المسموح للموظفين تسجيل الحضور والانصراف منها.",
+                "Manage the locations employees may use for clock-in and clock-out."
+              )}
             </p>
           </div>
           <button
@@ -313,7 +357,9 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
               {tr(language, "اسم الموقع", "Location Name")}
               <input
                 value={draft.name}
-                onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}
+                onChange={event =>
+                  setDraft(current => ({ ...current, name: event.target.value }))
+                }
                 placeholder={tr(language, "مثال: الفرع الرئيسي", "Example: Main Branch")}
                 className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-slate-900"
               />
@@ -360,7 +406,12 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                   max={1000}
                   step={10}
                   value={Math.min(1000, Math.max(10, Number(draft.radiusM || 100)))}
-                  onChange={event => setDraft(current => ({ ...current, radiusM: Number(event.target.value) }))}
+                  onChange={event =>
+                    setDraft(current => ({
+                      ...current,
+                      radiusM: Number(event.target.value),
+                    }))
+                  }
                   className="min-w-0 flex-1"
                 />
                 <HabatNumberInput
@@ -368,7 +419,10 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                   max={5000}
                   value={draft.radiusM}
                   onValueChange={value =>
-                    setDraft(current => ({ ...current, radiusM: Math.min(5000, Math.max(10, Number(value) || 10)) }))
+                    setDraft(current => ({
+                      ...current,
+                      radiusM: Math.min(5000, Math.max(10, Number(value) || 10)),
+                    }))
                   }
                   className="h-11 w-24 rounded-xl border border-slate-200 bg-white px-2 text-center"
                 />
@@ -402,59 +456,78 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
         </form>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          {locations.length ? locations.map(location => (
-            <article
-              key={location.id}
-              className={`rounded-2xl border p-4 ${location.isActive ? "border-slate-200" : "border-slate-100 bg-slate-50 opacity-60"}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={17} className="shrink-0" />
-                    <h4 className="truncate font-black">{location.name}</h4>
+          {locations.length ? (
+            locations.map(location => (
+              <article
+                key={location.id}
+                className={`rounded-2xl border p-4 ${
+                  location.isActive
+                    ? "border-slate-200"
+                    : "border-slate-100 bg-slate-50 opacity-60"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={17} className="shrink-0" />
+                      <h4 className="truncate font-black">{location.name}</h4>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-slate-600">
+                      {tr(language, "النطاق", "Radius")}: {Math.round(location.radiusM)}{" "}
+                      {tr(language, "م", "m")}
+                    </p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                  </p>
-                  <p className="mt-1 text-xs font-bold text-slate-600">
-                    {tr(language, "النطاق", "Radius")}: {Math.round(location.radiusM)} {tr(language, "م", "m")}
-                  </p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
+                      location.isActive
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    {location.isActive
+                      ? tr(language, "مفعل", "Active")
+                      : tr(language, "معطل", "Disabled")}
+                  </span>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${location.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
-                  {location.isActive ? tr(language, "مفعل", "Active") : tr(language, "معطل", "Disabled")}
-                </span>
-              </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => editLocation(location)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
-                >
-                  <Pencil size={14} /> {tr(language, "تعديل", "Edit")}
-                </button>
-                <a
-                  href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
-                >
-                  <ExternalLink size={14} /> {tr(language, "فتح بالخريطة", "Open Map")}
-                </a>
-                {location.isActive ? (
+                <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => void deactivateLocation(location)}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 px-3 text-xs font-black text-red-700"
+                    onClick={() => editLocation(location)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
                   >
-                    <Trash2 size={14} /> {tr(language, "تعطيل", "Disable")}
+                    <Pencil size={14} /> {tr(language, "تعديل", "Edit")}
                   </button>
-                ) : null}
-              </div>
-            </article>
-          )) : (
+                  <a
+                    href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-black"
+                  >
+                    <ExternalLink size={14} /> {tr(language, "فتح بالخريطة", "Open Map")}
+                  </a>
+                  {location.isActive ? (
+                    <button
+                      type="button"
+                      onClick={() => void deactivateLocation(location)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 px-3 text-xs font-black text-red-700"
+                    >
+                      <Trash2 size={14} /> {tr(language, "تعطيل", "Disable")}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            ))
+          ) : (
             <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500 lg:col-span-2">
-              {tr(language, "لا توجد مواقع بصمة بعد. أضف الموقع الأول بالأعلى.", "No attendance locations yet. Add the first location above.")}
+              {tr(
+                language,
+                "لا توجد مواقع بصمة بعد. أضف الموقع الأول بالأعلى.",
+                "No attendance locations yet. Add the first location above."
+              )}
             </div>
           )}
         </div>
@@ -466,7 +539,11 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
             {tr(language, "تعيين المواقع للموظفين", "Assign Locations to Employees")}
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            {tr(language, "يمكن ربط الموظف بموقع واحد أو أكثر. البصمة تُقبل فقط داخل أحد المواقع المحددة له.", "An employee can be assigned to one or more locations. Clocking is accepted only inside an assigned location.")}
+            {tr(
+              language,
+              "اربط كل موظف بالمواقع التي يُسمح له بالبصمة منها.",
+              "Assign each employee to the locations they are allowed to clock from."
+            )}
           </p>
         </div>
 
@@ -498,14 +575,22 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                   return (
                     <label
                       key={location.id}
-                      className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-bold ${checked ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white"}`}
+                      className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-bold ${
+                        checked
+                          ? "border-slate-950 bg-slate-950 text-white"
+                          : "border-slate-200 bg-white"
+                      }`}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         disabled={assignmentBusy === account.id}
                         onChange={event =>
-                          void toggleAssignment(account, location.id, event.target.checked)
+                          void toggleAssignment(
+                            account,
+                            location.id,
+                            event.target.checked
+                          )
                         }
                         className="h-4 w-4"
                       />
@@ -521,9 +606,15 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
 
       {settings ? (
         <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <h2 className="text-xl font-black">{tr(language, "دقة GPS", "GPS Accuracy")}</h2>
+          <h2 className="text-xl font-black">
+            {tr(language, "دقة GPS", "GPS Accuracy")}
+          </h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            {tr(language, "إذا كانت دقة جهاز الموظف أسوأ من الحد المحدد، تُرفض البصمة حتى تتحسن الإشارة.", "If the employee device accuracy is worse than this limit, clocking is rejected until GPS accuracy improves.")}
+            {tr(
+              language,
+              "حدد الحد الأدنى المقبول لدقة تحديد الموقع وقت البصمة.",
+              "Set the minimum accepted GPS accuracy for attendance clocking."
+            )}
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="text-sm font-bold">
@@ -535,7 +626,13 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
                 onValueChange={value =>
                   setSettings(current =>
                     current
-                      ? { ...current, maxAccuracyM: Math.min(1000, Math.max(10, Number(value) || 10)) }
+                      ? {
+                          ...current,
+                          maxAccuracyM: Math.min(
+                            1000,
+                            Math.max(10, Number(value) || 10)
+                          ),
+                        }
                       : current
                   )
                 }
@@ -554,58 +651,6 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
         </section>
       ) : null}
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-black">
-              {tr(language, "صور الحضور والانصراف", "Attendance Photos")}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              {tr(language, "الصور محفوظة بشكل خاص في R2 ولا تُعرض إلا من داخل النظام للمستخدم المصرح له.", "Photos are stored privately in R2 and are only served through the authorized system.")}
-            </p>
-          </div>
-          <Camera className="h-6 w-6 shrink-0 text-slate-400" />
-        </div>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {photos.length ? photos.map(photo => (
-            <button
-              key={photo.id}
-              type="button"
-              onClick={() => setSelectedPhoto(photo)}
-              className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-start transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="aspect-[4/3] bg-slate-100">
-                <img
-                  src={`/habat-api/v2/attendance-photos/${encodeURIComponent(photo.id)}`}
-                  alt={photo.displayName || "attendance"}
-                  loading="lazy"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div className="p-3">
-                <p className="truncate text-sm font-black">{photo.displayName || photo.accountEmail}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {photo.clockType === "check_in"
-                    ? tr(language, "حضور", "Check-in")
-                    : tr(language, "انصراف", "Check-out")}
-                  {" · "}{formatDate(photo.attendanceDate)}{" · "}{formatTime(photo.capturedAt)}
-                </p>
-                {photo.locationName ? (
-                  <p className="mt-1 truncate text-xs font-bold text-slate-600">
-                    <MapPin className="me-1 inline h-3.5 w-3.5" />{photo.locationName}
-                  </p>
-                ) : null}
-              </div>
-            </button>
-          )) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500 sm:col-span-2 lg:col-span-3 xl:col-span-4">
-              {tr(language, "لا توجد صور بصمات محفوظة حتى الآن.", "No attendance photos have been saved yet.")}
-            </div>
-          )}
-        </div>
-      </section>
-
       {message ? (
         <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-700 px-5 py-3 text-sm font-black text-white shadow-xl">
           <CheckCircle2 size={17} /> {message}
@@ -615,40 +660,6 @@ export default function HabatAttendanceSettings({ onDataChanged }: Props) {
       {error ? (
         <div className="fixed bottom-5 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-2xl bg-red-700 px-5 py-3 text-center text-sm font-black text-white shadow-xl">
           {error}
-        </div>
-      ) : null}
-
-      {selectedPhoto ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <div className="relative max-h-[94vh] w-full max-w-4xl" onClick={event => event.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute -top-2 end-0 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg"
-            >
-              <X size={20} />
-            </button>
-            <img
-              src={`/habat-api/v2/attendance-photos/${encodeURIComponent(selectedPhoto.id)}`}
-              alt={selectedPhoto.displayName || "attendance"}
-              className="mx-auto max-h-[82vh] max-w-full rounded-2xl object-contain"
-            />
-            <div className="mx-auto mt-3 max-w-xl rounded-2xl bg-white p-4 text-center text-slate-900">
-              <p className="font-black">{selectedPhoto.displayName || selectedPhoto.accountEmail}</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {selectedPhoto.clockType === "check_in"
-                  ? tr(language, "صورة الحضور", "Check-in Photo")
-                  : tr(language, "صورة الانصراف", "Check-out Photo")}
-                {" · "}{formatDate(selectedPhoto.attendanceDate)}{" · "}{formatTime(selectedPhoto.capturedAt)}
-              </p>
-              {selectedPhoto.locationName ? (
-                <p className="mt-1 text-sm font-bold">{selectedPhoto.locationName}</p>
-              ) : null}
-            </div>
-          </div>
         </div>
       ) : null}
     </div>
