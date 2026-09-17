@@ -44,6 +44,13 @@ workforce = replaceOnce(
 
 workforce = replaceOnce(
   workforce,
+  'export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendance }: Props) {',
+  'export default function WorkforceEmployeeFile({ identity, onBack, attendanceAccess }: Props) {',
+  "employee file attendance prop destructuring"
+);
+
+workforce = replaceOnce(
+  workforce,
   '{legacyAttendance ? (\n              <TabsTrigger',
   '{attendanceAccess ? (\n              <TabsTrigger',
   "attendance tab visibility"
