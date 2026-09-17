@@ -1,5 +1,6 @@
 import { resolveWorkforceScheduleDay, resolveWorkforceScheduleRange } from "./workforce-schedule-control.js";
 import { resolveWorkforceDayRange, resolveWorkforceEmployeeBySource, assertWorkforceDayMutationAllowed, assertPayrollSourceMutationAllowed, buildPayrollStaleStatements } from "./workforce-day-state.js";
+import { prepareAttendanceMutationGuard } from "./workforce-mutation-guard.js";
 
 const DEFAULT_SHIFT_ID = "habat_shift_default";
 const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
@@ -25,7 +26,7 @@ export async function handleHabatAttendanceV3Request({ request, url, db, resolve
   if (!principal.ok) return principal.response;
 
   const subpath = pathname.slice("/attendance/habat/v3".length) || "/";
-  const deleteRecordMatch = subpath.match(/^\/records\/([^/]+)$/);
+  const recordMatch = subpath.match(/^\/records\/([^/]+)$/);
   const deleteOverrideMatch = subpath.match(/^\/day-overrides\/([^/]+)$/);
 
   if (subpath === "/month") {
@@ -45,9 +46,11 @@ export async function handleHabatAttendanceV3Request({ request, url, db, resolve
     return createManualRecord(db, request, requester);
   }
 
-  if (deleteRecordMatch) {
-    if (request.method !== "DELETE") return methodNotAllowed(["DELETE"]);
-    return deleteAttendanceRecord(db, requester, decodeURIComponent(deleteRecordMatch[1]));
+  if (recordMatch) {
+    const recordId = decodeURIComponent(recordMatch[1]);
+    if (request.method === "PATCH") return updateAttendanceRecord(db, request, requester, recordId);
+    if (request.method === "DELETE") return deleteAttendanceRecord(db, requester, recordId);
+    return methodNotAllowed(["PATCH", "DELETE"]);
   }
 
   if (subpath === "/day-overrides") {
@@ -312,18 +315,19 @@ async function createManualRecord(db, request, requester) {
   if (!body.ok) return body.response;
   const accessId = normalizeText(body.value?.accessId);
   const date = normalizeDate(body.value?.date);
-  const checkInAt = normalizeIso(body.value?.checkInAt);
+  const checkInAt = normalizeOptionalIso(body.value?.checkInAt);
   const checkOutAt = normalizeOptionalIso(body.value?.checkOutAt);
   const reason = normalizeText(body.value?.reason);
-  if (!accessId || !date || !checkInAt) return json(400, { ok: false, message: "habat_manual_record_fields_required" });
+  if (!accessId || !date) return json(400, { ok: false, message: "habat_manual_record_fields_required" });
+  if (!checkInAt && !checkOutAt) return json(400, { ok: false, message: "habat_attendance_punch_required" });
   if (reason.length < 3) return json(400, { ok: false, message: "habat_correction_reason_required" });
-  if (checkOutAt && Date.parse(checkOutAt) < Date.parse(checkInAt)) {
+  if (checkInAt && checkOutAt && Date.parse(checkOutAt) < Date.parse(checkInAt)) {
     return json(400, { ok: false, message: "habat_invalid_attendance_order" });
   }
-  if (date > getRiyadhDateKey() || Date.parse(checkInAt) > Date.now()) {
+  if (date > getRiyadhDateKey() || (checkInAt && Date.parse(checkInAt) > Date.now()) || (checkOutAt && Date.parse(checkOutAt) > Date.now())) {
     return json(400, { ok: false, message: "habat_future_attendance_not_allowed" });
   }
-  if (getRiyadhDateKeyFromIso(checkInAt) !== date) {
+  if ((checkInAt && getRiyadhDateKeyFromIso(checkInAt) !== date) || (checkOutAt && getRiyadhDateKeyFromIso(checkOutAt) !== date)) {
     return json(400, { ok: false, message: "habat_attendance_date_mismatch" });
   }
 
@@ -406,6 +410,72 @@ async function createManualRecord(db, request, requester) {
   }
 }
 
+async function updateAttendanceRecord(db, request, requester, id) {
+  const current = await db.prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`).bind(id).first();
+  if (!current) return json(404, { ok: false, message: "habat_record_not_found" });
+
+  const body = await readJsonBody(request);
+  if (!body.ok) return body.response;
+  const value = body.value || {};
+  const reason = normalizeText(value.reason);
+  if (reason.length < 3) return json(400, { ok: false, message: "habat_correction_reason_required" });
+
+  const hasCheckIn = Object.prototype.hasOwnProperty.call(value, "checkInAt");
+  const hasCheckOut = Object.prototype.hasOwnProperty.call(value, "checkOutAt");
+  const checkInAt = hasCheckIn ? normalizeOptionalIso(value.checkInAt) : (normalizeText(current.check_in_at) || null);
+  const checkOutAt = hasCheckOut ? normalizeOptionalIso(value.checkOutAt) : (normalizeText(current.check_out_at) || null);
+  const date = normalizeText(current.attendance_date);
+
+  if (!checkInAt && !checkOutAt) return json(400, { ok: false, message: "habat_attendance_punch_required" });
+  if (checkInAt && checkOutAt && Date.parse(checkOutAt) < Date.parse(checkInAt)) {
+    return json(400, { ok: false, message: "habat_invalid_attendance_order" });
+  }
+  if ((checkInAt && Date.parse(checkInAt) > Date.now()) || (checkOutAt && Date.parse(checkOutAt) > Date.now())) {
+    return json(400, { ok: false, message: "habat_future_attendance_not_allowed" });
+  }
+  if ((checkInAt && getRiyadhDateKeyFromIso(checkInAt) !== date) || (checkOutAt && getRiyadhDateKeyFromIso(checkOutAt) !== date)) {
+    return json(400, { ok: false, message: "habat_attendance_date_mismatch" });
+  }
+
+  const accessId = normalizeText(current.access_id);
+  if (!accessId) return json(409, { ok: false, message: "workforce_employee_link_not_ready" });
+  const guard = await prepareAttendanceMutationGuard({
+    db,
+    tenantId: WORKFORCE_TENANT_ID,
+    sourceEmployeeId: accessId,
+    attendanceDate: date,
+    currentRecord: current,
+    mutation: "correction",
+  });
+
+  const shift = await resolveShiftForAccessDate(db, accessId, date);
+  if (!shift) return json(409, { ok: false, message: "habat_shift_not_configured" });
+  const schedule = current.scheduled_start_at && current.scheduled_end_at
+    ? { start: new Date(current.scheduled_start_at), end: new Date(current.scheduled_end_at) }
+    : buildScheduleWindow(date, shift);
+  const metrics = calculateMetrics(checkInAt, checkOutAt, shift, schedule);
+  const previousNotes = normalizeText(current.notes);
+  const correctionNote = `تصحيح إداري: ${reason}`;
+  const notes = previousNotes ? `${previousNotes}\n${correctionNote}` : correctionNote;
+  const now = nowIso();
+
+  try {
+    const update = db.prepare(
+      `UPDATE habat_attendance_records
+       SET check_in_at = ?, check_out_at = ?, attendance_status = ?,
+           late_minutes = ?, early_leave_minutes = ?, worked_minutes = ?,
+           notes = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(checkInAt, checkOutAt, metrics.status, metrics.lateMinutes, metrics.earlyLeaveMinutes, metrics.workedMinutes, notes, now, id);
+    await db.batch([update, ...(guard?.staleStatements || [])]);
+    const next = await db.prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`).bind(id).first();
+    await writeAudit(db, requester, "manager_update_attendance_record", "habat_attendance_record", id, current, { ...next, correctionReason: reason });
+    return json(200, { ok: true, record: mapRecord(next) });
+  } catch (error) {
+    console.error("[habat-v3] record update failed", error);
+    return json(500, { ok: false, message: "habat_record_update_failed" });
+  }
+}
 async function deleteAttendanceRecord(db, requester, id) {
   const current = await db
     .prepare(`SELECT * FROM habat_attendance_records WHERE id = ? LIMIT 1`)
@@ -809,15 +879,18 @@ function buildScheduleWindow(date, shift) {
 }
 
 function calculateMetrics(checkInAt, checkOutAt, shift, schedule) {
-  const checkIn = new Date(checkInAt);
+  const checkIn = checkInAt ? new Date(checkInAt) : null;
   const checkOut = checkOutAt ? new Date(checkOutAt) : null;
-  const rawLate = Math.max(0, Math.floor((checkIn.getTime() - schedule.start.getTime()) / 60000));
+  const rawLate = checkIn ? Math.max(0, Math.floor((checkIn.getTime() - schedule.start.getTime()) / 60000)) : 0;
   const grace = Number(shift.grace_minutes || 0);
   const lateMinutes = rawLate > grace ? rawLate : 0;
   const rawEarly = checkOut ? Math.max(0, Math.floor((schedule.end.getTime() - checkOut.getTime()) / 60000)) : 0;
   const tolerance = Number(shift.early_leave_tolerance_minutes || 0);
   const earlyLeaveMinutes = rawEarly > tolerance ? rawEarly : 0;
-  const workedMinutes = checkOut ? Math.max(0, Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)) : null;
+  const workedMinutes = checkIn && checkOut ? Math.max(0, Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)) : null;
+  if (!checkIn || !checkOut) {
+    return { status: "incomplete", lateMinutes, earlyLeaveMinutes, workedMinutes };
+  }
   let status = lateMinutes ? "late" : "present";
   if (earlyLeaveMinutes) status = lateMinutes ? "late_early_leave" : "early_leave";
   return { status, lateMinutes, earlyLeaveMinutes, workedMinutes };

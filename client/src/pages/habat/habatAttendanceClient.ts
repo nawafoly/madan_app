@@ -482,6 +482,13 @@ export function friendlyHabatError(error: unknown): string {
       return "يجب تسجيل الحضور أولًا.";
     case "habat_already_checked_out":
       return "تم تسجيل الانصراف مسبقًا اليوم.";
+    case "habat_checkout_cooldown": {
+      const payload = error instanceof HabatApiError ? error.payload : null;
+      const seconds = Number(payload?.retryAfterSeconds);
+      return Number.isFinite(seconds)
+        ? `انتظر ${Math.max(1, Math.ceil(seconds))} ثانية قبل تسجيل الانصراف.`
+        : "انتظر دقيقة بعد تسجيل الحضور قبل تسجيل الانصراف.";
+    }
     case "habat_non_working_day":
       return "اليوم غير مدرج ضمن أيام دوامك.";
     case "habat_shift_not_configured":
@@ -542,6 +549,8 @@ export function friendlyHabatError(error: unknown): string {
       return "اكتب سبب التصحيح الإداري.";
     case "habat_invalid_attendance_order":
       return "وقت الانصراف لا يمكن أن يكون قبل وقت الحضور.";
+    case "habat_attendance_punch_required":
+      return "حدد بصمة حضور أو انصراف واحدة على الأقل.";
     case "habat_default_shift_cannot_be_deleted":
       return "الدوام الافتراضي لا يمكن تعطيله.";
     case "habat_working_days_required":
@@ -601,6 +610,8 @@ export function statusLabel(status: string | null | undefined): string {
       return "انصراف مبكر";
     case "late_early_leave":
       return "متأخر · انصراف مبكر";
+    case "incomplete":
+      return "بصمة ناقصة";
     default:
       return status ? status : "—";
   }

@@ -6,6 +6,7 @@ const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
 const PHOTO_MAX_BYTES = Math.floor(2.5 * 1024 * 1024);
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_LOCATION_TOLERANCE_M = 20;
+const CHECKOUT_COOLDOWN_MS = 60 * 1000;
 
 export async function handleHabatAttendanceExtensionsRequest({
   request,
@@ -160,6 +161,19 @@ async function clockMutation({ db, bucket, request, requester, principal, clockT
       message: "habat_already_checked_out",
       record: mapRecord(existing),
     });
+  }
+
+  if (clockType === "check_out" && existing?.check_in_at) {
+    const checkedInAtMs = Date.parse(existing.check_in_at);
+    const elapsedMs = Number.isFinite(checkedInAtMs) ? Date.now() - checkedInAtMs : CHECKOUT_COOLDOWN_MS;
+    if (elapsedMs < CHECKOUT_COOLDOWN_MS) {
+      return json(429, {
+        ok: false,
+        message: "habat_checkout_cooldown",
+        retryAfterSeconds: Math.max(1, Math.ceil((CHECKOUT_COOLDOWN_MS - elapsedMs) / 1000)),
+        record: mapRecord(existing),
+      });
+    }
   }
 
   const shift = clockType === "check_out" && existing?.shift_id
