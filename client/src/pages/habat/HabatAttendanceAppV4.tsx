@@ -1543,12 +1543,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
             fallbackName: selectedEmployee.displayName,
           }}
           onBack={() => setPage("employees")}
-          legacyAttendance={
-            <AttendanceMonthWorkspace
-              access={selectedEmployee}
-              manager
-            />
-          }
+          attendanceAccess={selectedEmployee}
         />
       ) : <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
       case "accounts": return <HabatAccountManagement onDataChanged={onContextRefresh} />;
