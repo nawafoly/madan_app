@@ -21,6 +21,8 @@ export type HabatClockLocation = {
   longitude: number | null;
   accuracyM: number | null;
   distanceM: number | null;
+  locationId?: string | null;
+  locationName?: string | null;
 };
 
 export type HabatRecord = {
@@ -92,6 +94,39 @@ export type HabatAccessAccount = {
   mustChangePassword?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+export type HabatAttendanceLocation = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radiusM: number;
+  isActive: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type HabatLocationAccount = {
+  id: string;
+  email: string;
+  displayName: string;
+  accessLevel: "employee" | "manager";
+  locationIds: string[];
+};
+
+export type HabatAttendancePhoto = {
+  id: string;
+  recordId: string;
+  accessId: string | null;
+  attendanceDate: string;
+  clockType: "check_in" | "check_out";
+  contentType: string;
+  sizeBytes: number;
+  capturedAt: string;
+  displayName: string;
+  accountEmail: string | null;
+  locationName: string | null;
 };
 
 export type HabatAssignment = {
@@ -171,16 +206,220 @@ export class HabatApiError extends Error {
   }
 }
 
+function isClockMutation(path: string, init?: RequestInit) {
+  const normalized = path.replace(/^\/+/, "").replace(/\/+$/, "");
+  return (
+    String(init?.method || "GET").toUpperCase() === "POST" &&
+    (normalized === "v2/check-in" || normalized === "v2/check-out")
+  );
+}
+
+function parseJsonBody(body: BodyInit | null | undefined): Record<string, unknown> {
+  if (typeof body !== "string") return {};
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function ensureClockLocation(payload: Record<string, unknown>) {
+  const latitude = Number(payload.latitude);
+  const longitude = Number(payload.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) return payload;
+
+  const location = await readBrowserLocation(true);
+  return { ...payload, ...location };
+}
+
+async function requestRearCameraStream(): Promise<MediaStream> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("habat_camera_unavailable");
+  }
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { exact: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 960 },
+      },
+    });
+  } catch {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 960 },
+      },
+    });
+    const facingMode = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
+    if (facingMode === "user") {
+      stream.getTracks().forEach(track => track.stop());
+      throw new Error("habat_rear_camera_unavailable");
+    }
+    return stream;
+  }
+}
+
+export async function captureHabatRearCameraPhoto(): Promise<File> {
+  const stream = await requestRearCameraStream();
+
+  return new Promise<File>((resolve, reject) => {
+    const overlay = document.createElement("div");
+    const panel = document.createElement("div");
+    const title = document.createElement("div");
+    const video = document.createElement("video");
+    const actions = document.createElement("div");
+    const captureButton = document.createElement("button");
+    const cancelButton = document.createElement("button");
+
+    overlay.dir = "rtl";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483647",
+      background: "rgba(2,6,23,.92)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+    });
+    Object.assign(panel.style, {
+      width: "min(560px, 100%)",
+      borderRadius: "24px",
+      overflow: "hidden",
+      background: "#fff",
+      boxShadow: "0 24px 80px rgba(0,0,0,.35)",
+    });
+    Object.assign(title.style, {
+      padding: "16px 18px",
+      fontWeight: "800",
+      fontFamily: "inherit",
+      color: "#0f172a",
+    });
+    title.textContent = "تصوير البصمة بالكاميرا الخلفية";
+
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.srcObject = stream;
+    Object.assign(video.style, {
+      display: "block",
+      width: "100%",
+      maxHeight: "62vh",
+      objectFit: "cover",
+      background: "#000",
+    });
+
+    Object.assign(actions.style, {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "10px",
+      padding: "14px",
+    });
+    for (const button of [captureButton, cancelButton]) {
+      Object.assign(button.style, {
+        minHeight: "48px",
+        borderRadius: "14px",
+        border: "0",
+        fontWeight: "800",
+        fontFamily: "inherit",
+        cursor: "pointer",
+      });
+    }
+    captureButton.textContent = "التقاط الصورة";
+    captureButton.style.background = "#0f172a";
+    captureButton.style.color = "#fff";
+    cancelButton.textContent = "إلغاء";
+    cancelButton.style.background = "#e2e8f0";
+    cancelButton.style.color = "#0f172a";
+
+    actions.append(captureButton, cancelButton);
+    panel.append(title, video, actions);
+    overlay.append(panel);
+    document.body.append(overlay);
+
+    const cleanup = () => {
+      stream.getTracks().forEach(track => track.stop());
+      overlay.remove();
+    };
+
+    cancelButton.onclick = () => {
+      cleanup();
+      reject(new Error("habat_camera_cancelled"));
+    };
+
+    captureButton.onclick = () => {
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      if (!sourceWidth || !sourceHeight) {
+        cleanup();
+        reject(new Error("habat_photo_capture_failed"));
+        return;
+      }
+
+      const maxDimension = 1280;
+      const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        cleanup();
+        reject(new Error("habat_photo_capture_failed"));
+        return;
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        blob => {
+          cleanup();
+          if (!blob) {
+            reject(new Error("habat_photo_capture_failed"));
+            return;
+          }
+          resolve(
+            new File([blob], `habat-attendance-${Date.now()}.jpg`, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            })
+          );
+        },
+        "image/jpeg",
+        0.78
+      );
+    };
+
+    void video.play().catch(() => undefined);
+  });
+}
+
 export async function habatApi<T>(path: string, init?: RequestInit): Promise<T> {
+  let body = init?.body;
+
+  if (isClockMutation(path, init) && !(typeof FormData !== "undefined" && body instanceof FormData)) {
+    const payload = await ensureClockLocation(parseJsonBody(body));
+    const photo = await captureHabatRearCameraPhoto();
+    const form = new FormData();
+    form.append("payload", JSON.stringify(payload));
+    form.append("photo", photo, photo.name);
+    body = form;
+  }
+
   const headers = new Headers(init?.headers || {});
   headers.set("X-Habat-Client-Id", getHabatRealtimeClientId());
   headers.set("Accept", "application/json");
-  if (init?.body && !headers.has("Content-Type")) {
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body && !headers.has("Content-Type") && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(buildHabatApiUrl(path), {
     ...init,
+    body,
     headers,
     credentials: "same-origin",
     cache: "no-store",
@@ -229,6 +468,7 @@ export function friendlyHabatError(error: unknown): string {
     case "habat_access_inactive":
       return "فعّل صلاحية الحساب قبل تجهيز كلمة المرور.";
     case "habat_manager_required":
+    case "habat_management_forbidden":
       return "هذه العملية مخصصة للإدارة.";
     case "habat_auth_origin_forbidden":
       return "افتح نظام حبات الورق من عنوانه المعتمد لتنفيذ العملية.";
@@ -236,8 +476,6 @@ export function friendlyHabatError(error: unknown): string {
       return "هذا الحساب غير مصرح له بالدخول إلى نظام حبات الورق.";
     case "habat_clock_forbidden":
       return "هذا الحساب لا يملك صلاحية تسجيل الحضور والانصراف.";
-    case "habat_management_forbidden":
-      return "هذه العملية مخصصة للإدارة.";
     case "habat_already_checked_in":
       return "تم تسجيل الحضور مسبقًا اليوم.";
     case "habat_check_in_required":
@@ -249,44 +487,57 @@ export function friendlyHabatError(error: unknown): string {
     case "habat_shift_not_configured":
       return "لم يتم إعداد شفت لهذا الحساب.";
     case "habat_location_required":
+    case "geolocation_unavailable":
       return "يلزم السماح بالموقع لتسجيل الحضور أو الانصراف.";
-    case "habat_location_not_configured":
-      return "موقع الفرع لم يتم ضبطه من الإدارة بعد.";
+    case "habat_clock_location_not_assigned":
+      return "لم تحدد الإدارة موقع بصمة مسموح لهذا الموظف.";
     case "habat_location_accuracy_too_low": {
-      const payload =
-        error instanceof HabatApiError ? error.payload : null;
-      const accuracyValue = payload?.accuracyM;
-      const maxAccuracyValue = payload?.maxAccuracyM;
-      const accuracyM = Number(accuracyValue);
-      const maxAccuracyM = Number(maxAccuracyValue);
-
-      if (
-        accuracyValue !== null &&
-        accuracyValue !== undefined &&
-        maxAccuracyValue !== null &&
-        maxAccuracyValue !== undefined &&
-        Number.isFinite(accuracyM) &&
-        Number.isFinite(maxAccuracyM)
-      ) {
-        return `دقة الموقع الحالية ±${accuracyM}م، والحد المسموح ±${maxAccuracyM}م. انتظر تحسن إشارة GPS وحاول مجددًا.`;
+      const payload = error instanceof HabatApiError ? error.payload : null;
+      const accuracyM = Number(payload?.accuracyM);
+      const maxAccuracyM = Number(payload?.maxAccuracyM);
+      if (Number.isFinite(accuracyM) && Number.isFinite(maxAccuracyM)) {
+        return `دقة الموقع الحالية ±${Math.round(accuracyM)}م، والحد المسموح ±${Math.round(maxAccuracyM)}م. انتظر تحسن إشارة GPS وحاول مجددًا.`;
       }
-
       return "دقة الموقع غير كافية. انتظر تحسن إشارة GPS وحاول مجددًا.";
     }
-    case "habat_outside_location_range": {
-      const payload =
-        error instanceof HabatApiError ? error.payload : null;
+    case "habat_outside_location_range":
+    case "habat_outside_assigned_location_range": {
+      const payload = error instanceof HabatApiError ? error.payload : null;
       const distanceM = Number(payload?.distanceM);
       const radiusM = Number(payload?.radiusM);
-
+      const locationName = String(payload?.locationName || "الموقع المسموح");
       if (Number.isFinite(distanceM) && Number.isFinite(radiusM)) {
-        return `الموقع المقروء يبعد ${Math.round(distanceM)}م عن مركز الفرع، والنطاق المسموح ${Math.round(radiusM)}م.`;
+        return `أنت تبعد ${Math.round(distanceM)}م عن ${locationName}، والنطاق المسموح ${Math.round(radiusM)}م.`;
       }
-
-      return "أنت خارج نطاق الحضور المسموح.";
+      return "أنت خارج نطاق مواقع البصمة المسموحة لك.";
     }
+    case "habat_camera_unavailable":
+      return "الكاميرا غير متاحة في هذا الجهاز أو المتصفح.";
+    case "habat_rear_camera_unavailable":
+      return "تعذر تشغيل الكاميرا الخلفية. تحقق من صلاحية الكاميرا وحاول مجددًا.";
+    case "habat_camera_cancelled":
+      return "تم إلغاء التصوير ولم تُسجل البصمة.";
+    case "habat_photo_capture_failed":
+      return "تعذر التقاط الصورة. حاول مرة أخرى.";
+    case "habat_photo_required":
+      return "الصورة مطلوبة لإكمال تسجيل الحضور أو الانصراف.";
+    case "habat_invalid_attendance_photo":
+      return "صيغة صورة البصمة غير مدعومة.";
+    case "habat_attendance_photo_too_large":
+      return "حجم صورة البصمة أكبر من الحد المسموح.";
+    case "habat_photo_storage_unavailable":
+    case "habat_photo_storage_failed":
+      return "تعذر حفظ صورة البصمة الآن. حاول مرة أخرى.";
+    case "habat_location_name_required":
+      return "اكتب اسمًا واضحًا لموقع البصمة.";
+    case "habat_invalid_location_assignment":
+      return "أحد مواقع البصمة المحددة غير صالح أو غير مفعل.";
+    case "habat_location_assignment_failed":
+      return "تعذر حفظ مواقع الموظف المسموحة.";
+    case "habat_location_not_found":
+      return "موقع البصمة غير موجود.";
     case "habat_location_coordinates_required":
-      return "حدد إحداثيات الفرع قبل تفعيل إلزام الموقع.";
+      return "حدد إحداثيات الموقع قبل الحفظ.";
     case "habat_correction_reason_required":
       return "اكتب سبب التصحيح الإداري.";
     case "habat_invalid_attendance_order":
