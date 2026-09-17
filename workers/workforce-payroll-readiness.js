@@ -691,8 +691,8 @@ async function activeManualTotals(db, tenantId, entryId) {
   const row = await db.prepare(`SELECT
       COALESCE(SUM(CASE WHEN direction = 'addition' AND COALESCE(status, 'active') = 'active' THEN amount_halalas ELSE 0 END), 0) AS additions,
       COALESCE(SUM(CASE WHEN direction = 'deduction' AND COALESCE(status, 'active') = 'active' THEN amount_halalas ELSE 0 END), 0) AS deductions
-    FROM workforce_payroll_adjustments
-    WHERE tenant_id = ? AND payroll_entry_id = ?`)
+    FROM workforce_payroll_impacts
+    WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0`)
     .bind(tenantId, entryId)
     .first();
   return {
@@ -700,7 +700,6 @@ async function activeManualTotals(db, tenantId, entryId) {
     deductionsHalalas: Number(row?.deductions || 0),
   };
 }
-
 function deriveDailyHours(settings, schedules) {
   const configuredDaily = positiveNumber(settings?.daily_hours);
   if (configuredDaily > 0) return roundHours(configuredDaily);

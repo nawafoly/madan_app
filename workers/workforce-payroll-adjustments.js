@@ -79,22 +79,15 @@ async function getPayrollAdjustmentWorkspace(db, tenantId, employeeId, monthKey)
       .bind(tenantId, employeeId, monthKey).first(),
   ]);
 
-  let adjustments = [];
   let impactRows = [];
   if (entry?.id) {
-    const [legacyResult, impactResult] = await Promise.all([
-      db.prepare(`SELECT * FROM workforce_payroll_adjustments
+    const impactResult = await db.prepare(`SELECT * FROM workforce_payroll_impacts
                    WHERE tenant_id = ? AND employee_id = ? AND payroll_entry_id = ?
                    ORDER BY added_at DESC, id DESC`)
-        .bind(tenantId, employeeId, entry.id).all(),
-      db.prepare(`SELECT * FROM workforce_payroll_impacts
-                   WHERE tenant_id = ? AND employee_id = ? AND payroll_entry_id = ?
-                   ORDER BY added_at DESC, id DESC`)
-        .bind(tenantId, employeeId, entry.id).all(),
-    ]);
-    adjustments = legacyResult?.results || [];
+      .bind(tenantId, employeeId, entry.id).all();
     impactRows = impactResult?.results || [];
   }
+  const adjustments = impactRows.filter(row => !(Number(row?.automatic || 0) === 1 || row?.automatic === true));
 
   const settingsPreview = payrollSettingsPreview(settings);
   const totals = entry
@@ -133,8 +126,10 @@ async function getPayrollAdjustmentWorkspace(db, tenantId, employeeId, monthKey)
     },
     locked,
     lockedReason: locked ? "payroll_entry_not_draft" : null,
-    automaticAttendanceDeductionApplied: false,
-    impactLedger: buildCanonicalPayrollImpactLedger({ entry, impactRows: impactRows.length ? impactRows : null, manualAdjustments: adjustments }),
+    automaticAttendanceDeductionApplied: impactRows.some(row =>
+      clean(row?.source_type) === "payroll_readiness" && clean(row?.kind) === "attendance_deduction"
+    ),
+    impactLedger: buildCanonicalPayrollImpactLedger({ entry, impactRows }),
   };
 }
 
@@ -364,38 +359,38 @@ function buildRecomputeEntryStatement(db, tenantId, entryId, now) {
   return db.prepare(`UPDATE workforce_payroll_entries
                         SET manual_additions_halalas = (
                               SELECT COALESCE(SUM(amount_halalas), 0)
-                                FROM workforce_payroll_adjustments
-                               WHERE tenant_id = ? AND payroll_entry_id = ?
+                                FROM workforce_payroll_impacts
+                               WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                  AND direction = 'addition' AND COALESCE(status, 'active') = 'active'
                             ),
                             manual_deductions_halalas = (
                               SELECT COALESCE(SUM(amount_halalas), 0)
-                                FROM workforce_payroll_adjustments
-                               WHERE tenant_id = ? AND payroll_entry_id = ?
+                                FROM workforce_payroll_impacts
+                               WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                  AND direction = 'deduction' AND COALESCE(status, 'active') = 'active'
                             ),
                             gross_salary_halalas = base_salary_halalas + allowances_halalas + overtime_halalas + (
                               SELECT COALESCE(SUM(amount_halalas), 0)
-                                FROM workforce_payroll_adjustments
-                               WHERE tenant_id = ? AND payroll_entry_id = ?
+                                FROM workforce_payroll_impacts
+                               WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                  AND direction = 'addition' AND COALESCE(status, 'active') = 'active'
                             ),
                             total_deductions_halalas = attendance_deduction_halalas + absence_deduction_halalas + (
                               SELECT COALESCE(SUM(amount_halalas), 0)
-                                FROM workforce_payroll_adjustments
-                               WHERE tenant_id = ? AND payroll_entry_id = ?
+                                FROM workforce_payroll_impacts
+                               WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                  AND direction = 'deduction' AND COALESCE(status, 'active') = 'active'
                             ),
                             net_salary_halalas = MAX(0,
                               base_salary_halalas + allowances_halalas + overtime_halalas + (
                                 SELECT COALESCE(SUM(amount_halalas), 0)
-                                  FROM workforce_payroll_adjustments
-                                 WHERE tenant_id = ? AND payroll_entry_id = ?
+                                  FROM workforce_payroll_impacts
+                                 WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                    AND direction = 'addition' AND COALESCE(status, 'active') = 'active'
                               ) - attendance_deduction_halalas - absence_deduction_halalas - (
                                 SELECT COALESCE(SUM(amount_halalas), 0)
-                                  FROM workforce_payroll_adjustments
-                                 WHERE tenant_id = ? AND payroll_entry_id = ?
+                                  FROM workforce_payroll_impacts
+                                 WHERE tenant_id = ? AND payroll_entry_id = ? AND automatic = 0
                                    AND direction = 'deduction' AND COALESCE(status, 'active') = 'active'
                               )
                             ),
@@ -412,7 +407,6 @@ function buildRecomputeEntryStatement(db, tenantId, entryId, now) {
       tenantId, entryId
     );
 }
-
 function assertDraft(period, entry) {
   if (!period || !entry) throw httpError(404, "workforce_payroll_entry_not_found");
   if (!MUTABLE_ENTRY_STATUSES.has(clean(period.status)) || !MUTABLE_ENTRY_STATUSES.has(clean(entry.status))) {
