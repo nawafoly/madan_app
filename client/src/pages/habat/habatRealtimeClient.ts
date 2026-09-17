@@ -370,7 +370,12 @@ export function useHabatRealtimeRefresh(
       }
     }
 
-    const unsubscribe = subscribeHabatRealtime(() => {
+    const unsubscribe = subscribeHabatRealtime(event => {
+      const ownClientId = getHabatRealtimeClientId();
+      if (event.sourceClientId && event.sourceClientId === ownClientId) {
+        return;
+      }
+
       if (running) {
         pending = true;
         return;
