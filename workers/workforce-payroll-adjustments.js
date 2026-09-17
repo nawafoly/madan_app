@@ -1,3 +1,5 @@
+import { buildCanonicalPayrollImpactLedger } from "./workforce-payroll-impact-ledger.js";
+
 const ADDITION_KINDS = new Set(["bonus", "allowance", "commission", "manual_addition"]);
 const DEDUCTION_KINDS = new Set(["advance", "penalty", "manual_deduction", "other_deduction"]);
 const MUTABLE_ENTRY_STATUSES = new Set(["draft"]);
@@ -126,6 +128,7 @@ async function getPayrollAdjustmentWorkspace(db, tenantId, employeeId, monthKey)
     locked,
     lockedReason: locked ? "payroll_entry_not_draft" : null,
     automaticAttendanceDeductionApplied: false,
+    impactLedger: buildCanonicalPayrollImpactLedger({ entry, manualAdjustments: adjustments }),
   };
 }
 

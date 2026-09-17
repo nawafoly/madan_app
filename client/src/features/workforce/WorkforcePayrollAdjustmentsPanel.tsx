@@ -31,8 +31,31 @@ type Adjustment = {
   cancelledAt: string | null;
 };
 
-type Workspace = {
-  employeeId: string;
+type ImpactLedgerRow = {
+  id: string;
+  direction: Direction;
+  kind: string;
+  amountHalalas: number;
+  reason: string;
+  status: "active" | "cancelled";
+  automatic: boolean;
+  sourceType: string;
+};
+
+type ImpactLedger = {
+  rows: ImpactLedgerRow[];
+  totals: {
+    additionsHalalas: number;
+    deductionsHalalas: number;
+    overtimeHalalas: number;
+    attendanceDeductionHalalas: number;
+    absenceDeductionHalalas: number;
+    manualAdditionsHalalas: number;
+    manualDeductionsHalalas: number;
+  };
+};
+
+type Workspace = {  employeeId: string;
   monthKey: string;
   settingsReady: boolean;
   period: { id: string; status: string; periodStart: string; periodEnd: string } | null;
@@ -53,6 +76,7 @@ type Workspace = {
   locked: boolean;
   lockedReason: string | null;
   automaticAttendanceDeductionApplied: boolean;
+  impactLedger: ImpactLedger;
 };
 
 const additionKinds: Array<{ value: Kind; ar: string; en: string }> = [
@@ -68,7 +92,10 @@ const deductionKinds: Array<{ value: Kind; ar: string; en: string }> = [
   { value: "other_deduction", ar: "استقطاع آخر", en: "Other Deduction" },
 ];
 const allKinds = [...additionKinds, ...deductionKinds];
-function kindLabel(kind: Kind, language: "ar" | "en") {
+function kindLabel(kind: string, language: "ar" | "en") {
+  if (kind === "overtime") return tr(language, "عمل إضافي", "Overtime");
+  if (kind === "attendance_deduction") return tr(language, "خصم حضور", "Attendance Deduction");
+  if (kind === "absence_deduction") return tr(language, "خصم غياب", "Absence Deduction");
   const item = allKinds.find(entry => entry.value === kind);
   return item ? (language === "ar" ? item.ar : item.en) : kind;
 }
@@ -198,8 +225,8 @@ export default function WorkforcePayrollAdjustmentsPanel({ employeeId }: { emplo
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white"><WalletCards className="h-5 w-5" /></span>
           <div>
-            <h3 className="font-black">{tr(language, "الإضافات والخصومات اليدوية", "Manual Additions & Deductions")}</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{tr(language, "مكافآت وبدلات وعمولات وسلف وجزاءات وخصومات يدوية. هذه الشاشة لا تنشئ خصم حضور أو غياب تلقائيًا.", "Bonuses, allowances, commissions, advances, penalties, and manual deductions. This screen does not create automatic attendance or absence deductions.")}</p>
+            <h3 className="font-black">{tr(language, "مركز الأثر المالي للراتب", "Payroll Financial Impact Center")}</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{tr(language, "مرجع موحد للأوفر تايم وخصومات الحضور والغياب والإضافات والخصومات اليدوية. كل شاشة مالية تعتمد على هذا المركز بدل حساب الأثر بشكل منفصل.", "Canonical view for overtime, attendance and absence deductions, and manual additions or deductions. Financial screens consume this center instead of recalculating impact independently.")}</p>
           </div>
         </div>
         <div className="flex items-end gap-2">
@@ -208,8 +235,8 @@ export default function WorkforcePayrollAdjustmentsPanel({ employeeId }: { emplo
         </div>
       </div>
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-        <strong>{tr(language, "حماية الرواتب:", "Payroll Protection:")}</strong> خصم الحضور التلقائي غير مفعل في هذه المرحلة. أي قيمة حضور/غياب ستظل صفرًا حتى يتم ربط Payroll Readiness واعتماد محرك الاحتساب.
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+        <strong>{tr(language, "المصدر المالي الموحد:", "Canonical Financial Source:")}</strong> {tr(language, "الأثر التلقائي يأتي من Payroll Readiness المبني على Workforce Day State، والعمليات اليدوية تدخل في نفس دفتر الأثر بدون تكرار الحساب داخل الواجهة.", "Automatic impact comes from Payroll Readiness built on Workforce Day State, while manual operations appear in the same impact ledger without UI-side recalculation.")}
       </div>
 
       {error ? <div className="flex gap-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{error}</div> : null}
@@ -218,9 +245,9 @@ export default function WorkforcePayrollAdjustmentsPanel({ employeeId }: { emplo
       {workspace ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label={tr(language, "الإضافات اليدوية", "Manual Additions")} value={money(workspace.preview.manualAdditionsHalalas, language)} />
-            <Metric label={tr(language, "الخصومات اليدوية", "Manual Deductions")} value={money(workspace.preview.manualDeductionsHalalas, language)} />
-            <Metric label={tr(language, "إجمالي الاستقطاعات", "Total Deductions")} value={money(workspace.preview.totalDeductionsHalalas, language)} />
+            <Metric label={tr(language, "الأوفر تايم", "Overtime")} value={money(workspace.impactLedger.totals.overtimeHalalas, language)} />
+            <Metric label={tr(language, "خصم الحضور", "Attendance Deduction")} value={money(workspace.impactLedger.totals.attendanceDeductionHalalas, language)} />
+            <Metric label={tr(language, "خصم الغياب", "Absence Deduction")} value={money(workspace.impactLedger.totals.absenceDeductionHalalas, language)} />
             <Metric label={tr(language, "صافي مبدئي", "Preliminary Net")} value={money(workspace.preview.netSalaryHalalas, language)} emphasized />
           </div>
 
@@ -229,6 +256,23 @@ export default function WorkforcePayrollAdjustmentsPanel({ employeeId }: { emplo
             <Badge variant="outline" className="rounded-full">{tr(language, "عمليات نشطة:", "Active Adjustments:")} {activeCount}</Badge>
             {!workspace.settingsReady ? <Badge variant="destructive" className="rounded-full">{tr(language, "إعدادات الراتب غير مكتملة", "Payroll Settings Incomplete")}</Badge> : null}
             {workspace.locked ? <Badge variant="destructive" className="rounded-full">{tr(language, "المسير مقفل للتعديل", "Payroll Locked")}</Badge> : null}
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <Table className="min-w-[760px]">
+              <TableHeader><TableRow><TableHead className="text-start">{tr(language, "الأثر", "Impact")}</TableHead><TableHead className="text-start">{tr(language, "المبلغ", "Amount")}</TableHead><TableHead className="text-start">{tr(language, "المصدر", "Source")}</TableHead><TableHead className="text-start">{tr(language, "الحالة", "Status")}</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {workspace.impactLedger.rows.map(item => (
+                  <TableRow key={item.id} className={item.status === "cancelled" ? "opacity-50" : ""}>
+                    <TableCell className="font-bold">{kindLabel(item.kind, language)}</TableCell>
+                    <TableCell className={item.direction === "addition" ? "font-bold text-emerald-700" : "font-bold text-red-700"}>{item.direction === "addition" ? "+" : "-"}{money(item.amountHalalas, language)}</TableCell>
+                    <TableCell>{item.automatic ? tr(language, "تلقائي · Workforce Day State", "Automatic · Workforce Day State") : tr(language, "يدوي", "Manual")}</TableCell>
+                    <TableCell>{item.status === "active" ? tr(language, "نشط", "Active") : tr(language, "ملغى", "Cancelled")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!workspace.impactLedger.rows.length ? <p className="py-8 text-center text-sm text-slate-500">{tr(language, "لا يوجد أثر مالي مسجل لهذا الشهر حتى الآن.", "No payroll financial impact is recorded for this month yet.")}</p> : null}
           </div>
 
           <form onSubmit={submit} className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
