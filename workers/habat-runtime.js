@@ -2,6 +2,7 @@ import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
 import { handleHabatAttendanceV3Request } from "./habat-attendance-v3.js";
 import { handleHabatAttendanceReportingRequest } from "./habat-attendance-reporting.js";
+import { handleHabatAttendanceExtensionsRequest } from "./habat-attendance-extensions.js";
 import { handleHabatPortalRequest } from "./habat-portal.js";
 import { handleHabatWorkforceRequest } from "./habat-workforce-adapter.js";
 import { resolveHabatRequesterContext } from "./habat-auth.js";
@@ -68,8 +69,18 @@ export async function handleHabatRequest(args) {
   }
 
   let response;
+  const usesAttendanceExtensions =
+    pathname === "/attendance/habat/v2/check-in" ||
+    pathname === "/attendance/habat/v2/check-out" ||
+    pathname === "/attendance/habat/v2/locations" ||
+    pathname.startsWith("/attendance/habat/v2/locations/") ||
+    pathname.startsWith("/attendance/habat/v2/location-assignments/") ||
+    pathname === "/attendance/habat/v2/attendance-photos" ||
+    pathname.startsWith("/attendance/habat/v2/attendance-photos/");
 
-  if (pathname.startsWith("/attendance/habat/workforce/")) {
+  if (usesAttendanceExtensions) {
+    response = await handleHabatAttendanceExtensionsRequest(habatArgs);
+  } else if (pathname.startsWith("/attendance/habat/workforce/")) {
     response = await handleHabatWorkforceRequest(habatArgs);
   } else if (pathname.startsWith("/attendance/habat/portal/")) {
     response = await handleHabatPortalRequest(habatArgs);
