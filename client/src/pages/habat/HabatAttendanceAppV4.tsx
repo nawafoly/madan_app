@@ -1080,7 +1080,7 @@ function ManagerRecordsPage() {
   const { language } = useLanguage();
   const today = todayRiyadhKey();
   const [month, setMonth] = useState(today.slice(0, 7));
-  const [employeeEmail, setEmployeeEmail] = useState("all");
+  const [employeeAccessId, setEmployeeAccessId] = useState("all");
   const [status, setStatus] = useState("all");
   const [accounts, setAccounts] = useState<HabatAccessAccount[]>([]);
   const [records, setRecords] = useState<HabatRecord[]>([]);
@@ -1092,11 +1092,11 @@ function ManagerRecordsPage() {
   const refresh = useCallback(async () => {
     const range = monthRange(month);
     const params = new URLSearchParams({ from: range.from, to: range.to > today ? today : range.to, limit: "500" });
-    if (employeeEmail !== "all") params.set("email", employeeEmail);
+    if (employeeAccessId !== "all") params.set("accessId", employeeAccessId);
     if (status !== "all") params.set("status", status);
     try {
       const [recordPayload, accountPayload, photoPayload] = await Promise.all([
-        habatApi<{ ok: true; records: HabatRecord[] }>(`v2/records?${params.toString()}`),
+        habatApi<{ ok: true; records: HabatRecord[] }>(`v3/records?${params.toString()}`),
         habatApi<{ ok: true; accounts: HabatAccessAccount[] }>("access"),
         habatApi<{ ok: true; photos: HabatAttendancePhoto[] }>("v2/attendance-photos?limit=200"),
       ]);
@@ -1106,7 +1106,7 @@ function ManagerRecordsPage() {
       setAccounts(accountPayload.accounts || []);
       setPhotos((photoPayload.photos || []).filter(photo => recordIds.has(photo.recordId)));
     } catch (caught) { setError(extendedError(caught)); }
-  }, [employeeEmail, month, status, today]);
+  }, [employeeAccessId, month, status, today]);
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function remove(record: HabatRecord) {
@@ -1125,12 +1125,12 @@ function ManagerRecordsPage() {
           </div>
           <div className="space-y-2">
             <Label>{tr(language, "الموظف", "Employee")}</Label>
-            <Select value={employeeEmail} onValueChange={setEmployeeEmail}>
+            <Select value={employeeAccessId} onValueChange={setEmployeeAccessId}>
               <SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{tr(language, "جميع الموظفين", "All Employees")}</SelectItem>
                 {accounts.filter(account => account.isActive).map(account => (
-                  <SelectItem key={account.id} value={account.email}>{account.displayName || account.email}</SelectItem>
+                  <SelectItem key={account.id} value={account.id}>{account.displayName || account.email}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

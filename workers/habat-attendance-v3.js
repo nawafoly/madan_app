@@ -39,6 +39,11 @@ export async function handleHabatAttendanceV3Request({ request, url, db, resolve
     return getSavedMonthlySummary(db, url, principal);
   }
 
+  if (subpath === "/records") {
+    if (request.method !== "GET") return methodNotAllowed(["GET"]);
+    return listAttendanceRecords(db, url, principal);
+  }
+
   if (!principal.canManage) return forbidden("habat_management_forbidden");
 
   if (subpath === "/records/manual") {
@@ -310,6 +315,54 @@ async function buildMonthWorkspace(db, access, month) {
   };
 }
 
+async function listAttendanceRecords(db, url, principal) {
+  const today = getRiyadhDateKey();
+  const to = normalizeDate(url.searchParams.get("to")) || today;
+  const from = normalizeDate(url.searchParams.get("from")) || `${to.slice(0, 7)}-01`;
+  if (from > to) return json(400, { ok: false, message: "habat_invalid_date_range" });
+
+  const requestedAccessId = normalizeText(url.searchParams.get("accessId"));
+  if (!principal.canManage && requestedAccessId && requestedAccessId !== principal.accessId) {
+    return forbidden("habat_management_forbidden");
+  }
+  const scopedAccessId = principal.canManage ? requestedAccessId : principal.accessId;
+  const status = normalizeText(url.searchParams.get("status")).toLowerCase();
+  const parsedLimit = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(500, Math.floor(parsedLimit))) : 200;
+
+  const filters = ["attendance_date >= ?", "attendance_date <= ?"];
+  const bindings = [from, to];
+  if (scopedAccessId) {
+    const accessResult = await getAccessById(db, scopedAccessId);
+    if (!accessResult.ok) return accessResult.response;
+    filters.push("(access_id = ? OR ((access_id IS NULL OR trim(access_id) = '') AND lower(account_email) = lower(?)))");
+    bindings.push(scopedAccessId, normalizeText(accessResult.row.email).toLowerCase());
+  }
+  if (status) {
+    filters.push("attendance_status = ?");
+    bindings.push(status);
+  }
+
+  try {
+    const result = await db.prepare(
+      `SELECT * FROM habat_attendance_records
+       WHERE ${filters.join(" AND ")}
+       ORDER BY attendance_date DESC, COALESCE(check_in_at, check_out_at) DESC, id DESC
+       LIMIT ?`
+    ).bind(...bindings, limit).all();
+    return json(200, {
+      ok: true,
+      from,
+      to,
+      accessId: scopedAccessId || null,
+      limit,
+      records: (result?.results || []).map(mapRecord),
+    });
+  } catch (error) {
+    console.error("[habat-v3] records list failed", error);
+    return json(500, { ok: false, message: "habat_records_query_failed" });
+  }
+}
 async function createManualRecord(db, request, requester) {
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
