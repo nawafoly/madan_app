@@ -434,13 +434,26 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const record = context.today;
   const checkedIn = Boolean(record?.checkInAt);
   const checkedOut = Boolean(record?.checkOutAt);
   const nextType: "check-in" | "check-out" | null = checkedOut ? null : checkedIn ? "check-out" : "check-in";
+  const checkedInAtMs = record?.checkInAt ? Date.parse(record.checkInAt) : Number.NaN;
+  const checkoutRetrySeconds = nextType === "check-out" && Number.isFinite(checkedInAtMs)
+    ? Math.max(0, Math.ceil((60_000 - (clockNow - checkedInAtMs)) / 1000))
+    : 0;
+  const checkoutLocked = nextType === "check-out" && checkoutRetrySeconds > 0;
+
+  useEffect(() => {
+    if (!checkedIn || checkedOut) return;
+    setClockNow(Date.now());
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [checkedIn, checkedOut, record?.checkInAt]);
 
   async function submitClock() {
-    if (!nextType || busy || !context.principal.canClock) return;
+    if (!nextType || busy || checkoutLocked || !context.principal.canClock) return;
     if (nextType === "check-out" && !window.confirm(tr(language, "تأكيد تسجيل الانصراف؟", "Confirm clock out?"))) return;
     setBusy(true);
     setMessage("");
@@ -457,7 +470,9 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
     }
   }
 
-  const actionLabel = nextType === "check-in" ? tr(language, "تسجيل حضور", "Clock In") : nextType === "check-out" ? tr(language, "تسجيل انصراف", "Clock Out") : tr(language, "تم اكتمال الدوام", "Shift Completed");
+  const actionLabel = checkoutLocked
+    ? tr(language, `يمكنك تسجيل الانصراف بعد ${checkoutRetrySeconds} ثانية`, `Clock out available in ${checkoutRetrySeconds}s`)
+    : nextType === "check-in" ? tr(language, "تسجيل حضور", "Clock In") : nextType === "check-out" ? tr(language, "تسجيل انصراف", "Clock Out") : tr(language, "تم اكتمال الدوام", "Shift Completed");
   return (
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -483,12 +498,12 @@ function ClockPage({ context, onRefresh }: { context: HabatContext; onRefresh: (
       <div className="mt-7 flex flex-col items-center">
         <button
           type="button"
-          disabled={!nextType || busy || !context.principal.canClock}
+          disabled={!nextType || busy || checkoutLocked || !context.principal.canClock}
           onClick={() => void submitClock()}
           className={cn(
             "flex h-28 w-28 items-center justify-center rounded-full border-2 bg-white shadow-lg transition sm:h-32 sm:w-32",
             nextType === "check-out" ? "border-rose-200 text-rose-700" : "border-emerald-200 text-emerald-700",
-            (!nextType || !context.principal.canClock) && "opacity-40"
+            (!nextType || checkoutLocked || !context.principal.canClock) && "opacity-40"
           )}
         >
           {busy ? <RefreshCw className="h-11 w-11 animate-spin" /> : <Fingerprint className="h-14 w-14" />}
@@ -534,10 +549,10 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
     setSaving(true);
     setError("");
     try {
-      await habatApi(`v2/records/${encodeURIComponent(record.id)}/correct`, {
-        method: "POST",
+      await habatApi(`v3/records/${encodeURIComponent(record.id)}`, {
+        method: "PATCH",
         body: JSON.stringify({
-          checkInAt: fromRiyadhDateTimeLocal(record.attendanceDate + "T" + checkInAt),
+          checkInAt: checkInAt ? fromRiyadhDateTimeLocal(record.attendanceDate + "T" + checkInAt) : null,
           checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(record.attendanceDate + "T" + checkOutAt) : null,
           reason,
         }),
@@ -559,12 +574,12 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
           <DialogDescription>{record ? `${record.displayName || record.accountEmail} · ${formatDate(record.attendanceDate)}` : ""}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" /></div>
           <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatTimeInput value={checkOutAt} onChange={setCheckOutAt} className="h-12 rounded-2xl" /></div>
           <div className="space-y-2"><Label>{tr(language, "سبب التعديل", "Reason for Edit")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="سبب واضح للتعديل" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
-            <Button type="submit" disabled={saving || reason.trim().length < 3} className="rounded-xl bg-black">
+            <Button type="submit" disabled={saving || reason.trim().length < 3 || (!checkInAt && !checkOutAt)} className="rounded-xl bg-black">
               <Save className="h-4 w-4" />
               {tr(language, "حفظ التعديل", "Save Changes")}
             </Button>
@@ -582,12 +597,14 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
   const { language } = useLanguage();
   const [checkInAt, setCheckInAt] = useState("");
   const [checkOutAt, setCheckOutAt] = useState("");
+  const [punchMode, setPunchMode] = useState<"both" | "check_in" | "check_out">("both");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!day) return;
+    setPunchMode("both");
     setCheckInAt(day.shift?.startTime || "09:00");
     setCheckOutAt(day.shift?.endTime || "17:00");
     setReason("");
@@ -605,8 +622,8 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
         body: JSON.stringify({
           accessId: access.id,
           date: day.date,
-          checkInAt: fromRiyadhDateTimeLocal(day.date + "T" + checkInAt),
-          checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(day.date + "T" + checkOutAt) : null,
+          checkInAt: punchMode === "check_out" ? null : (checkInAt ? fromRiyadhDateTimeLocal(day.date + "T" + checkInAt) : null),
+          checkOutAt: punchMode === "check_in" ? null : (checkOutAt ? fromRiyadhDateTimeLocal(day.date + "T" + checkOutAt) : null),
           reason,
         }),
       });
@@ -624,8 +641,9 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
       <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
         <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}><DialogTitle>{tr(language, "إضافة بصمة يدوية", "Add Manual Attendance")}</DialogTitle><DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription></DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" required /></div>
-          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatTimeInput value={checkOutAt} onChange={setCheckOutAt} className="h-12 rounded-2xl" /></div>
+          <div className="space-y-2"><Label>{tr(language, "نوع البصمة", "Punch Type")}</Label><Select value={punchMode} onValueChange={value => setPunchMode(value as "both" | "check_in" | "check_out")}><SelectTrigger className="h-12 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="both">{tr(language, "حضور وانصراف", "Clock In & Out")}</SelectItem><SelectItem value="check_in">{tr(language, "حضور فقط", "Clock In Only")}</SelectItem><SelectItem value="check_out">{tr(language, "انصراف فقط", "Clock Out Only")}</SelectItem></SelectContent></Select></div>
+          {punchMode !== "check_out" ? <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatTimeInput value={checkInAt} onChange={setCheckInAt} className="h-12 rounded-2xl" required /></div> : null}
+          {punchMode !== "check_in" ? <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatTimeInput value={checkOutAt} onChange={setCheckOutAt} className="h-12 rounded-2xl" required /></div> : null}
           <div className="space-y-2"><Label>{tr(language, "سبب الإضافة", "Reason for Addition")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
