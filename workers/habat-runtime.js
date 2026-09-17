@@ -79,7 +79,20 @@ export async function handleHabatRequest(args) {
     pathname.startsWith("/attendance/habat/v2/attendance-photos/");
 
   if (usesAttendanceExtensions) {
-    response = await handleHabatAttendanceExtensionsRequest(habatArgs);
+    try {
+      response = await handleHabatAttendanceExtensionsRequest(habatArgs);
+    } catch (error) {
+      const status = Number(error?.status || 500);
+      const code = String(error?.code || error?.message || "habat_attendance_extension_failed");
+      console.error("[habat-runtime] attendance extension failed", error);
+      response = Response.json(
+        { ok: false, message: code },
+        {
+          status: Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500,
+          headers: { "Cache-Control": "no-store" },
+        }
+      );
+    }
   } else if (pathname.startsWith("/attendance/habat/workforce/")) {
     response = await handleHabatWorkforceRequest(habatArgs);
   } else if (pathname.startsWith("/attendance/habat/portal/")) {
