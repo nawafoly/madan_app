@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS workforce_payroll_impacts (
   month_key TEXT NOT NULL,
   direction TEXT NOT NULL CHECK (direction IN ('addition', 'deduction')),
   kind TEXT NOT NULL,
-  amount_halalas INTEGER NOT NULL CHECK (amount_halalas > 0),
+  amount_halalas INTEGER NOT NULL CHECK (amount_halalas >= 0),
   reason TEXT NOT NULL,
   note TEXT,
   source_type TEXT NOT NULL,
