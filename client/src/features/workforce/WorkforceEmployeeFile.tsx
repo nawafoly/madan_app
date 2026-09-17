@@ -54,6 +54,8 @@ import {
 import WorkforceAnnualLeavePanel from "./WorkforceAnnualLeavePanel";
 import WorkforceScheduleControlPanel from "./WorkforceScheduleControlPanel";
 import WorkforceAttendanceOperationsPanel from "./WorkforceAttendanceOperationsPanel";
+import HabatEmployeeAttendancePanel from "@/pages/habat/HabatEmployeeAttendancePanel";
+import type { HabatAccessAccount } from "@/pages/habat/habatAttendanceClient";
 import WorkforceLeaveLifecyclePanel from "./WorkforceLeaveLifecyclePanel";
 import WorkforcePayrollAdjustmentsPanel from "./WorkforcePayrollAdjustmentsPanel";
 import WorkforcePayrollReadinessPanel from "./WorkforcePayrollReadinessPanel";
@@ -72,7 +74,7 @@ export type WorkforceEmployeeIdentity = {
 type Props = {
   identity: WorkforceEmployeeIdentity;
   onBack?: () => void;
-  legacyAttendance?: ReactNode;
+  attendanceAccess?: HabatAccessAccount | null;
 };
 
 type EmployeeTab =
@@ -381,7 +383,7 @@ function scheduleSummary(
   }
 }
 
-export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendance }: Props) {
+export default function WorkforceEmployeeFile({ identity, onBack, attendanceAccess }: Props) {
   const tabStorageKey = `${EMPLOYEE_TAB_STORAGE_PREFIX}${clean(identity.accountUid) || clean(identity.accountEmail).toLowerCase() || "unknown"}`;
 
   const [activeTab, setActiveTab] = useState<EmployeeTab>(() => {
@@ -777,7 +779,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
             >
               {tr(language, "الغياب", "Absences")}
             </TabsTrigger>
-            {legacyAttendance ? (
+            {attendanceAccess ? (
               <TabsTrigger
                 value="attendance"
                 className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
@@ -1031,12 +1033,16 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="absences" className="space-y-5">
-          {employeeId ? <WorkforceAttendanceOperationsPanel employeeId={employeeId} /> : null}
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><SectionTitle title={tr(language, "الغياب", "Absences")} description={tr(language, "سجل إداري مستقل مع توضيح المعالجة المقترحة للراتب بدون تنفيذ خصم تلقائي قبل جاهزية payroll attendance.", "Independent administrative record showing the proposed payroll treatment without applying an automatic deduction before payroll attendance is ready.")} icon={<UserX className="h-5 w-5" />} /><div className="mt-5 overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead className="text-start">{tr(language, "التاريخ", "Date")}</TableHead><TableHead className="text-start">{tr(language, "المدة", "Duration")}</TableHead><TableHead className="text-start">{tr(language, "المعالجة", "Treatment")}</TableHead><TableHead className="text-start">{tr(language, "السبب", "Reason")}</TableHead></TableRow></TableHeader><TableBody>{absences.map(item => <TableRow key={item.id}><TableCell>{dateText(item.absence_date)}</TableCell><TableCell>{item.day_portion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.payroll_treatment === "no_deduction" ? tr(language, "بدون خصم", "No Deduction") : item.payroll_treatment === "manual_review" ? tr(language, "مراجعة يدوية", "Manual Review") : tr(language, "سياسة الحضور", "Attendance Policy")}</TableCell><TableCell>{item.reason || "—"}</TableCell></TableRow>)}</TableBody></Table>{!absences.length ? <p className="py-8 text-center text-sm text-slate-500">{tr(language, "لا توجد غيابات مسجلة.", "No absences recorded.")}</p> : null}</div></section>
           <form onSubmit={createAbsence} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">{tr(language, "تسجيل غياب", "Record Absence")}</h3><div dir={languageDir(language)} className="grid gap-4 md:grid-cols-3"><Field label={tr(language, "التاريخ", "Date")}><HabatDatePicker value={absenceDate} onChange={setAbsenceDate} /></Field><Field label={tr(language, "المدة", "Duration")}><Select value={absencePortion} onValueChange={value => setAbsencePortion(value as WorkforceAbsence["day_portion"])}><SelectTrigger dir={languageDir(language)} className="h-11 w-full rounded-2xl text-start"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="full_day">{tr(language, "يوم كامل", "Full Day")}</SelectItem><SelectItem value="half_day">{tr(language, "نصف يوم", "Half Day")}</SelectItem></SelectContent></Select></Field><Field label="المعالجة"><Select value={absenceTreatment} onValueChange={value => setAbsenceTreatment(value as WorkforceAbsence["payroll_treatment"])}><SelectTrigger dir={languageDir(language)} className="h-11 w-full rounded-2xl text-start"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="attendance_policy">{tr(language, "سياسة الحضور", "Attendance Policy")}</SelectItem><SelectItem value="no_deduction">{tr(language, "بدون خصم", "No Deduction")}</SelectItem><SelectItem value="manual_review">{tr(language, "مراجعة يدوية", "Manual Review")}</SelectItem></SelectContent></Select></Field></div><Field label={tr(language, "السبب", "Reason")}><Textarea value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} className="min-h-20 rounded-2xl" /></Field><Button type="submit" disabled={saving || !absenceDate} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> {tr(language, "تسجيل الغياب", "Save Absence")}</Button></form>
         </TabsContent>
 
-        {legacyAttendance ? <TabsContent value="attendance"><div className="rounded-[28px] border border-slate-200 bg-white p-1 shadow-sm"><div className="rounded-[24px] bg-[#f5f5f3] p-3 sm:p-4">{legacyAttendance}</div></div></TabsContent> : null}
+        {attendanceAccess ? (
+          <TabsContent value="attendance" className="space-y-5">
+            {employeeId ? <WorkforceAttendanceOperationsPanel employeeId={employeeId} /> : null}
+            <HabatEmployeeAttendancePanel access={attendanceAccess} />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );
