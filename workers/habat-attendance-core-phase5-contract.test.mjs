@@ -46,7 +46,7 @@ test("manual payroll commands dual-write to canonical impact storage during cuto
   assert.match(adjustments, /SELECT \* FROM workforce_payroll_impacts/);
   assert.match(adjustments, /INSERT INTO workforce_payroll_impacts/);
   assert.match(adjustments, /UPDATE workforce_payroll_impacts/);
-  assert.match(adjustments, /impactRows: impactRows\.length \? impactRows : null/);
+  assert.match(adjustments, /impactLedger: buildCanonicalPayrollImpactLedger\(\{ entry, impactRows \}\)/);
   assert.match(adjustments, /\[insert, impactInsert, recompute, audit\]/);
   assert.match(adjustments, /\[cancel, impactCancel, recompute, audit\]/);
 });
