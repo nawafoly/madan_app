@@ -62,6 +62,7 @@ const outbound = [];
 const worker = new Miniflare({ modules: true, script: workerBuild.outputFiles[0].text,
   compatibilityDate: "2026-03-12", compatibilityFlags: ["nodejs_compat"],
   d1Databases: { ATTENDANCE_DB: "habat-local-test" },
+  r2Buckets: { FILES_BUCKET: "habat-local-test-files" },
   bindings: { CORS_ALLOWED_ORIGINS: "https://habat-alwaraq.pages.dev" },
   outboundService(request) { outbound.push(request.url); throw new Error("External network forbidden in Habat test"); },
 });
@@ -78,11 +79,19 @@ const newPassword = `Personal-${crypto.randomUUID()}`;
 const resetPassword = `Reset-${crypto.randomUUID()}`;
 let requests = 0;
 
+function clockForm(payload) {
+  const form = new FormData();
+  form.append("payload", JSON.stringify(payload));
+  form.append("photo", new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }), "attendance.jpg");
+  return form;
+}
+
 async function api(route, { jar, body, method = body ? "POST" : "GET", status = 200, headers = {} } = {}) {
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   const response = await pages.dispatchFetch(`${origin}/habat-api/${route}`, {
-    method, headers: { Origin: origin, ...(body ? { "Content-Type": "application/json" } : {}),
+    method, headers: { Origin: origin, ...(body && !isFormData ? { "Content-Type": "application/json" } : {}),
       ...(jar?.cookie ? { Cookie: jar.cookie } : {}), ...headers },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
   });
   requests++;
   const payload = await response.json();
@@ -99,6 +108,8 @@ try {
     "workers/attendance-migrations/0006_habat_attendance_management.sql",
     "workers/attendance-migrations/0007_habat_attendance_day_management.sql",
     "workers/attendance-migrations/0008_habat_cloudflare_auth.sql",
+    "workers/attendance-migrations/0009_habat_attendance_photos.sql",
+    "workers/attendance-migrations/0010_habat_attendance_locations.sql",
     "workers/workforce-migrations/0001_workforce_core_foundation.sql",
     "workers/workforce-migrations/0002_workforce_annual_leave_ledger.sql",
     "workers/workforce-migrations/0003_workforce_schedule_control.sql",
@@ -195,13 +206,28 @@ try {
     },
   });
 
-  const mobileClockIn = await api("v2/check-in", {
+  const location = await api("v2/locations", {
     jar: manager,
     body: {
+      name: "Local Test Branch",
+      latitude: branchLatitude,
+      longitude: branchLongitude,
+      radiusM: 100,
+    },
+  });
+  await api(`v2/location-assignments/manager`, {
+    jar: manager,
+    method: "PUT",
+    body: { locationIds: [location.payload.location.id] },
+  });
+
+  const mobileClockIn = await api("v2/check-in", {
+    jar: manager,
+    body: clockForm({
       latitude: latitudeAtDistance(108),
       longitude: branchLongitude,
       accuracyM: 20,
-    },
+    }),
   });
   assert.equal(mobileClockIn.payload.record.checkInLocation.latitude, latitudeAtDistance(108));
   assert.equal(mobileClockIn.payload.record.checkInLocation.longitude, branchLongitude);
@@ -212,16 +238,16 @@ try {
   const rejectedForAccuracy = await api("v2/check-out", {
     jar: manager,
     status: 422,
-    body: { latitude: branchLatitude, longitude: branchLongitude, accuracyM: 151 },
+    body: clockForm({ latitude: branchLatitude, longitude: branchLongitude, accuracyM: 151 }),
   });
   assert.equal(rejectedForAccuracy.payload.message, "habat_location_accuracy_too_low");
 
   const rejectedOutsideRange = await api("v2/check-out", {
     jar: manager,
     status: 403,
-    body: { latitude: latitudeAtDistance(130), longitude: branchLongitude, accuracyM: 20 },
+    body: clockForm({ latitude: latitudeAtDistance(130), longitude: branchLongitude, accuracyM: 20 }),
   });
-  assert.equal(rejectedOutsideRange.payload.message, "habat_outside_location_range");
+  assert.equal(rejectedOutsideRange.payload.message, "habat_outside_assigned_location_range");
   assert.ok(rejectedOutsideRange.payload.distanceM > rejectedOutsideRange.payload.radiusM);
   assert.equal(rejectedOutsideRange.payload.radiusM, 100);
   console.log("[integration] fresh mobile GPS payload, bounded accuracy tolerance, and outside-range rejection PASS");
