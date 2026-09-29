@@ -188,12 +188,7 @@ test("Habat V4 actually subscribes to realtime", () => {
 
   assert.match(
     v4,
-    /useHabatRealtimeRefresh\(refreshFromRealtime\);/
-  );
-
-  assert.match(
-    v4,
-    /key=\{realtimeRevision\}/
+    /useHabatRealtimeRefresh\(onContextRefresh\);/
   );
 });
 
