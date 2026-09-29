@@ -244,7 +244,7 @@ try {
 
   const rejectedOutsideRange = await api("v2/check-out", {
     jar: manager,
-    status: 403,
+    status: 422,
     body: clockForm({ latitude: latitudeAtDistance(130), longitude: branchLongitude, accuracyM: 20 }),
   });
   assert.equal(rejectedOutsideRange.payload.message, "habat_outside_assigned_location_range");
